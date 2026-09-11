@@ -1,0 +1,4 @@
+(executable
+ (name main)
+ (modules systemf parser main)
+ (flags (:standard -w -a)))

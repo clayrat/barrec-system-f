@@ -1,0 +1,27 @@
+# Generated Rocq build files and artifacts
+/Makefile.coq
+/Makefile.coq.conf
+/.Makefile.coq.d
+*.vo
+*.vos
+*.vok
+*.vod
+*.glob
+*.aux
+.lia.cache
+.nia.cache
+.rocq-native/
+
+# Extraction and OCaml build output
+/extraction/systemf.ml
+/extraction/systemf.mli
+/extraction/_build/
+*.cmi
+*.cmo
+*.cmx
+*.o
+
+# Local experiment output; reference results can be committed explicitly.
+/bench/results/*
+!/bench/results/README.md
+__pycache__/

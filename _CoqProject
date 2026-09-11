@@ -1,0 +1,14 @@
+-Q theories SystemF
+
+theories/F/Syntax.v
+theories/F/Scope.v
+theories/F/Check.v
+theories/F/OperationalSemantics.v
+theories/HM/Infer.v
+theories/FreeTheorems/Formula.v
+theories/FreeTheorems/Generate.v
+theories/FreeTheorems/Correctness.v
+theories/BarRec/Bound.v
+theories/HMElab.v
+theories/Examples.v
+theories/Tests.v

@@ -1,11 +1,11 @@
-(** * Hindley-Milner inference — planned
+(** * Hindley--Milner inference
 
-    Adapt W-in-Coq-master.zip in this namespace, preserving its term,
-    monotype, scheme, substitution, freshness, and generalization
-    interfaces. Split unification into specification, failure certificates,
-    and the algorithm before exposing runW here.
+    Public facade for the Rocq-9.1 adaptation of W-in-Coq.  It preserves the
+    upstream [term], [ty], [schm], [ctx], and [runW] interfaces.  The public
+    unifier facade additionally separates its specification, executable
+    result, and sound failure theorem. *)
 
-    Check equality before the occurs check and prove failure soundness.
-    The existing lexicographic termination measure can be retained.
-
-    This scaffold contains no inference algorithm or assumed theorem. *)
+From SystemF.HM Require Export
+  Unify WExec WExecCorrect WCorrect WCorrespondence.
+From SystemF.HM.WInCoq Require Export Schemes Context Typing.
+From SystemF.HM.WInCoq Require Export Infer.

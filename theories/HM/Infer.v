@@ -6,6 +6,6 @@
     result, and sound failure theorem. *)
 
 From SystemF.HM Require Export
-  Unify WExec WExecCorrect WCorrect WCorrespondence.
+  Unify WExec WTrace WExecCorrect WCorrect WCorrespondence.
 From SystemF.HM.WInCoq Require Export Schemes Context Typing.
 From SystemF.HM.WInCoq Require Export Infer.

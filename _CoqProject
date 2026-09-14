@@ -1,6 +1,7 @@
 -Q theories SystemF
 
 theories/F/Syntax.v
+theories/F/OPE.v
 theories/F/Scope.v
 theories/F/Check.v
 theories/F/OperationalSemantics.v
@@ -35,6 +36,7 @@ theories/HM/UnifyExecCorrect.v
 theories/HM/Unify.v
 theories/HM/Infer.v
 theories/HM/WExec.v
+theories/HM/WTrace.v
 theories/HM/WExecCorrect.v
 theories/HM/WCorrect.v
 theories/HM/WCorrespondence.v
@@ -42,6 +44,11 @@ theories/HM/Examples.v
 theories/FreeTheorems/Formula.v
 theories/FreeTheorems/Generate.v
 theories/FreeTheorems/Correctness.v
+theories/FreeTheorems/Fundamental.v
+theories/FreeTheorems/ListTheorem.v
+theories/FreeTheorems/FilterTheorem.v
+theories/FreeTheorems/NegativeTheorem.v
+theories/FreeTheorems/Presentation.v
 theories/BarRec/Bound.v
 theories/HMElab.v
 theories/Examples.v

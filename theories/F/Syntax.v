@@ -8,8 +8,10 @@
     [fterm] records typing, but does not enforce type-variable scope;
     that additional invariant belongs to F.Scope and F.Check.
 
-    The artifact's simultaneous [term_subst] is deliberately left in the
-    upstream baseline while its reported defects are investigated. *)
+    The artifact's simultaneous [term_subst] is not copied: the reducer in
+    F.OperationalSemantics uses its own [term_subst1], and the artifact's
+    substitution defect is repaired separately in
+    patches/blot-f.v-bound.patch for the bound experiments. *)
 
 From Stdlib Require Import Arith List.
 Import ListNotations.

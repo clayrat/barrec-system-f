@@ -1,7 +1,7 @@
 COQC ?= coqc
 DUNE ?= dune
 
-.PHONY: all core extract run clean
+.PHONY: all core extract audit run clean
 all: run
 
 core:
@@ -10,7 +10,10 @@ core:
 extract: core
 	$(COQC) -Q ../theories SystemF Extract.v
 
-run: extract
+audit: extract
+	python3 audit.py
+
+run: audit
 	$(DUNE) exec ./main.exe
 
 clean:

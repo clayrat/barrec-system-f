@@ -7,7 +7,7 @@
 
 From Stdlib Require Import List.
 Import ListNotations.
-From SystemF.F Require Import Syntax.
+From SystemF.F Require Import Syntax Check.
 
 (** forall X. X -> X *)
 Definition type1 : type := TForall (TArrow (TVar 0) (TVar 0)).
@@ -29,6 +29,20 @@ Definition term3 : fterm [] type1 :=
 (** (lambda x:type1. x) term1 *)
 Definition term4 : fterm [] type1 :=
   FApp (FAbs (FVar (FVar0 type1))) term1.
+
+(** The same four inputs before intrinsic type checking. *)
+Definition raw_term1 : RawChurch :=
+  RCTAbs (RCAbs (TVar 0) (RCVar 0)).
+
+Definition raw_term2 : RawChurch :=
+  RCAbs type1
+    (RCApp (RCTApp (RCVar 0) type1) (RCVar 0)).
+
+Definition raw_term3 : RawChurch :=
+  RCApp (RCTApp raw_term1 type1) raw_term1.
+
+Definition raw_term4 : RawChurch :=
+  RCApp (RCAbs type1 (RCVar 0)) raw_term1.
 
 Definition erased_examples : list term :=
   [fterm_to_term term1; fterm_to_term term2;

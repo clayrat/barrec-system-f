@@ -24,4 +24,11 @@
 # Local experiment output; reference results can be committed explicitly.
 /bench/results/*
 !/bench/results/README.md
+!/bench/results/blot-baseline*.json
+!/bench/results/blot-baseline*.log
+!/bench/results/blot-repaired*.json
+!/bench/results/blot-repaired*.log
+!/bench/results/blot-trace-js-term1.tsv.gz
+!/bench/results/blot-trace-ocaml-baseline-term1.tsv.gz
+!/bench/results/blot-trace-ocaml-repaired-term1.tsv.gz
 __pycache__/

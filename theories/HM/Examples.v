@@ -9,6 +9,20 @@ Definition repeated_application : term :=
     (let_t 2 (app_t (var_t 0) (var_t 1))
       (app_t (var_t 0) (var_t 1)))).
 
+(** Closed, constant-free end-to-end fixture for term elaboration:
+    [let id = fun x => x in id id]. *)
+Definition hm_let_identity_self_application : term :=
+  let_t 0 (lam_t 1 (var_t 1))
+    (app_t (var_t 0) (var_t 0)).
+
+(** A successful W term with an unconstrained type variable that occurs only
+    in an internal annotation: [fun x -> (fun y -> x) (fun z -> z)]. *)
+Definition hm_dead_internal_type_variable : term :=
+  lam_t 0
+    (app_t
+      (lam_t 1 (var_t 0))
+      (lam_t 2 (var_t 2))).
+
 (** Church encoding of a pair constructor at the HM term level:
     [fun left right consumer => consumer left right]. *)
 Definition hm_pair : term :=

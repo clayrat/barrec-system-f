@@ -80,6 +80,83 @@ let rec hm_term_equal left right =
       && hm_term_equal left_body right_body
   | _ -> false
 
+let accept_w_elaboration () =
+  if not (constant_freeb hm_let_identity_self_application) then
+    failwith "W elaboration fixture escaped the constant-free fragment";
+  (match erase_hm_closed hm_let_identity_self_application with
+   | Some erased ->
+       let expected =
+         App (Abs (App (Var O, Var O)), Abs (Var O))
+       in
+       if not (term_equal erased expected) then
+         failwith "HM let erasure changed unexpectedly"
+   | None -> failwith "closed constant-free HM fixture did not erase");
+  (match runW_elab hm_let_identity_self_application [] with
+   | Elaborated (ty, substitution, tree) as result ->
+       if not
+         (w_result_equal
+           (erase_w_elab_result result)
+           (runW_exec hm_let_identity_self_application []))
+       then failwith "W elaboration does not erase to runW_exec";
+       if not (hm_term_equal
+         (w_elab_tree_source tree) hm_let_identity_self_application)
+       then failwith "W elaboration tree does not recover its source";
+       if not (eq_ty_dec (w_elab_tree_type tree) ty) then
+         failwith "W elaboration tree does not expose its result type";
+       if int_of_nat (w_elab_instantiation_count O tree) <> 2 then
+         failwith "W elaboration did not retain both id instantiations";
+       Printf.printf
+         "  let id = fun x -> x in id id: %s, substitution %s\n"
+         (pp_hm_ty ty) (pp_substitution substitution)
+   | Elaboration_rejected _ ->
+       failwith "W elaboration rejected its end-to-end fixture");
+  (match runWChurchChecked
+      (fun _ -> type1) hm_let_identity_self_application with
+   | Ok checked_elaboration ->
+       let elaboration = checked_elaboration.checked_church_elaboration in
+       (match checked_elaboration.checked_church_certificate with
+        | ExistT (ty, intrinsic) ->
+            if not (type_eq_dec ty elaboration.raw_church_systemf_type) then
+              failwith "reified RawChurch has an unexpected checked type";
+            let erased = fterm_to_term [] ty intrinsic in
+            if not (term_equal erased
+              (checked_church_erasure checked_elaboration))
+            then failwith "retained checker certificate changed its erasure";
+            if not (term_equal erased
+              (erase_raw elaboration.raw_church_term))
+            then failwith "checked RawChurch changed its erasure";
+            if not (term_equal erased
+              (App (Abs (App (Var O, Var O)), Abs (Var O))))
+            then failwith "W-to-RawChurch bridge changed HM erasure";
+            (match eval_cap (nat_of_int 2) erased with
+             | Some (steps, normal_form) ->
+                 if int_of_nat steps <> 2
+                    || not (term_equal normal_form (Abs (Var O)))
+                 then failwith "main W-to-F term has an unexpected WH trace";
+                 Printf.printf
+                   "  checked erasure: %s\n  weak-head: %s step(s), %s\n"
+                   (pp_term erased) (pp_nat steps) (pp_term normal_form)
+             | None ->
+                 failwith "main W-to-F term exhausted its exact WH cap")
+       )
+   | Err _ -> failwith "W-to-RawChurch reification failed");
+  (match runWChurchChecked
+      (fun _ -> type1) hm_dead_internal_type_variable with
+   | Ok checked_elaboration ->
+       let elaboration = checked_elaboration.checked_church_elaboration in
+       if not (type_eq_dec elaboration.raw_church_systemf_type type1) then
+         failwith "dead internal type variable changed the principal type";
+       if not (term_equal (checked_church_erasure checked_elaboration)
+         (Abs (App (Abs (Var (S O)), Abs (Var O)))))
+       then failwith "defaulted Church elaboration changed HM erasure";
+       print_endline
+         "  dead internal type variable: defaulted and checker-accepted"
+   | Err _ ->
+       failwith "dead internal type variable escaped reification defaulting");
+  match runW_elab (Const_t O) [] with
+  | Elaboration_rejected (Elab_unsupported_constant O) -> ()
+  | _ -> failwith "W elaboration accepted a source constant"
+
 let parse_hm_or_fail source =
   match Parser.parse_hm_program source with
   | Parser.Parsed expression -> expression
@@ -387,6 +464,8 @@ let () =
         "  repeated application: %s\n"
         (pp_hm_ty inferred_exec)
   end;
+  print_endline "Main HM to System F pipeline:";
+  accept_w_elaboration ();
   print_endline "HM surface frontend:";
   Printf.printf "  source: %s\n" main_hm_source;
   print_endline "  resolved names and expanded pair match the Rocq fixture";
@@ -475,7 +554,9 @@ let () =
     failwith "negative-occurrence free theorem changed unexpectedly";
   Printf.printf "  negative occurrence: %s\n" negative_formula;
   (match infer_relational_formula_exec
-           demo_constant_type (Lam_t (O, Var_t O)) with
+           demo_constant_type hm_let_identity_self_application with
    | Some formula ->
-       Printf.printf "  W identity: %s\n" (pp_generated_formula formula)
-   | None -> failwith "W identity did not reach the relational generator")
+       Printf.printf "  W let-id theorem: %s\n"
+         (pp_generated_formula formula)
+   | None ->
+       failwith "main W-to-F input did not reach the relational generator")

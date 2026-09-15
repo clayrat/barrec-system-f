@@ -3,7 +3,9 @@
 theories/F/Syntax.v
 theories/F/OPE.v
 theories/F/Scope.v
+theories/F/TypeSubstitution.v
 theories/F/Check.v
+theories/F/RawTyping.v
 theories/F/OperationalSemantics.v
 theories/HM/WInCoq/LibTactics.v
 theories/HM/WInCoq/SimpleTypes.v
@@ -24,6 +26,8 @@ theories/HM/WInCoq/Rename.v
 theories/HM/WInCoq/Gen.v
 theories/HM/WInCoq/NewTypeVariable.v
 theories/HM/WInCoq/Typing.v
+theories/HM/ElabScope.v
+theories/HM/Erasure.v
 theories/HM/WInCoq/DisjointTail.v
 theories/HM/WInCoq/ProductList.v
 theories/HM/WInCoq/MoreGeneral.v
@@ -40,6 +44,8 @@ theories/HM/WTrace.v
 theories/HM/WExecCorrect.v
 theories/HM/WCorrect.v
 theories/HM/WCorrespondence.v
+theories/HM/WElab.v
+theories/HM/ElabSemantics.v
 theories/HM/Examples.v
 theories/FreeTheorems/Formula.v
 theories/FreeTheorems/Generate.v

@@ -15,7 +15,7 @@ From SystemF.F Require Import Syntax OPE Scope Check OperationalSemantics.
 From SystemF.FreeTheorems Require Import
   Formula Generate Correctness Fundamental ListTheorem FilterTheorem
   NegativeTheorem Presentation.
-From SystemF.HM Require Import Infer Unify.
+From SystemF.HM Require Import ElabScope Erasure Infer Unify.
 Require Import SystemF.HM.Examples.
 
 (** ** Type-variable scope *)
@@ -1114,6 +1114,167 @@ Proof.
   apply runW_checked_rejected_no_typing.
 Qed.
 
+(** ** Source fragment for HM-to-System-F elaboration *)
+
+Example elaboration_fragment_accepts_end_to_end_fixture :
+  constant_free hm_let_identity_self_application.
+Proof.
+  cbn [hm_let_identity_self_application constant_free].
+  tauto.
+Qed.
+
+Example elaboration_fragment_boolean_accepts_end_to_end_fixture :
+  constant_freeb hm_let_identity_self_application = true.
+Proof. reflexivity. Qed.
+
+Example elaboration_fragment_rejects_a_constant :
+  ~ constant_free (const_t 0).
+Proof. exact (fun impossible => impossible). Qed.
+
+Example elaboration_fragment_rejects_nested_constants :
+  constant_freeb
+    (let_t 0 (lam_t 1 (var_t 1))
+      (app_t (var_t 0) (const_t 7))) = false.
+Proof. reflexivity. Qed.
+
+Example elaboration_fragment_decision_is_exact : forall expression,
+  constant_freeb expression = true <-> constant_free expression.
+Proof. apply constant_freeb_true_iff. Qed.
+
+(** ** Erasure of named HM terms *)
+
+Definition erased_hm_let_identity_self_application :
+    SystemF.F.Syntax.term :=
+  App
+    (Abs (App (Var 0) (Var 0)))
+    (Abs (Var 0)).
+
+Example hm_erasure_desugars_the_end_to_end_let :
+  erase_hm_closed hm_let_identity_self_application =
+  Some erased_hm_let_identity_self_application.
+Proof. reflexivity. Qed.
+
+Example hm_erasure_uses_nearest_binder_under_shadowing :
+  erase_hm_closed (lam_t 0 (lam_t 0 (var_t 0))) =
+  Some (Abs (Abs (Var 0))).
+Proof. reflexivity. Qed.
+
+Example hm_erasure_keeps_outer_binder_index :
+  erase_hm_closed (lam_t 0 (lam_t 1 (var_t 0))) =
+  Some (Abs (Abs (Var 1))).
+Proof. reflexivity. Qed.
+
+Example hm_erasure_rejects_an_unbound_name :
+  erase_hm_closed (var_t 42) = None.
+Proof. reflexivity. Qed.
+
+Example hm_erasure_rejects_a_constant :
+  erase_hm_closed (const_t 0) = None.
+Proof. reflexivity. Qed.
+
+Example hm_erasure_domain_is_exact : forall expression,
+  (exists erased, erase_hm_closed expression = Some erased) <->
+  constant_free expression /\ hm_names_scoped [] expression.
+Proof. apply erase_hm_closed_success_iff. Qed.
+
+(** ** Structural Algorithm W elaboration *)
+
+Definition hm_let_identity_self_application_substitution : substitution :=
+  [(1, arrow (var 2) (var 2));
+   (3, arrow (var 2) (var 2))].
+
+Definition hm_let_identity_self_application_tree : WElabTree :=
+  elab_let 0 (arrow (var 0) (var 0)) [0]
+    (sc_arrow (sc_gen 0) (sc_gen 0))
+    (elab_lambda 1 0 (var 0)
+      (elab_variable 1 (sc_var 0) [] (var 0)))
+    (elab_application
+      (elab_variable 0
+        (sc_arrow (sc_gen 0) (sc_gen 0))
+        [var 1] (arrow (var 1) (var 1)))
+      (elab_variable 0
+        (sc_arrow (sc_gen 0) (sc_gen 0))
+        [var 2] (arrow (var 2) (var 2)))
+      3
+      (arrow (var 1) (var 1))
+      (arrow (arrow (var 2) (var 2)) (var 3))
+      hm_let_identity_self_application_substitution
+      (arrow (var 2) (var 2))).
+
+Example w_elab_end_to_end_result :
+  runW_elab hm_let_identity_self_application [] =
+  elaborated
+    (arrow (var 2) (var 2))
+    hm_let_identity_self_application_substitution
+    hm_let_identity_self_application_tree.
+Proof. reflexivity. Qed.
+
+Example w_elab_records_both_identity_instantiations :
+  w_elab_instantiation_count 0
+    hm_let_identity_self_application_tree = 2.
+Proof. reflexivity. Qed.
+
+Example w_elab_tree_recovers_source_and_type :
+  w_elab_tree_source hm_let_identity_self_application_tree =
+    hm_let_identity_self_application /\
+  w_elab_tree_type hm_let_identity_self_application_tree =
+    arrow (var 2) (var 2).
+Proof. split; reflexivity. Qed.
+
+Example w_elab_erases_to_W_for_the_whole_fragment : forall
+    expression environment,
+  constant_free expression ->
+  erase_w_elab_result (runW_elab expression environment) =
+  runW_exec expression environment.
+Proof. apply runW_elab_erases. Qed.
+
+Example w_elab_matches_checked_W_for_the_whole_fragment : forall
+    expression environment,
+  constant_free expression ->
+  erase_w_elab_result (runW_elab expression environment) =
+  observe_checked_result (runW expression environment).
+Proof. apply runW_elab_checked_correspondence. Qed.
+
+Example w_elab_has_full_checked_W_correspondence : forall
+    expression environment,
+  constant_free expression ->
+  runW_elab_checked_spec expression environment.
+Proof. apply runW_elab_checked_full_correspondence. Qed.
+
+Example w_elab_end_to_end_result_is_the_checked_W_result :
+  runW hm_let_identity_self_application [] =
+  inl
+    (arrow (var 2) (var 2),
+     hm_let_identity_self_application_substitution).
+Proof.
+  assert (Hfragment : constant_free hm_let_identity_self_application).
+  { cbn [hm_let_identity_self_application constant_free].
+    tauto. }
+  apply (proj1
+    (runW_elab_success_iff_checked_success
+      hm_let_identity_self_application []
+      (arrow (var 2) (var 2))
+      hm_let_identity_self_application_substitution Hfragment)).
+  exists hm_let_identity_self_application_tree.
+  exact w_elab_end_to_end_result.
+Qed.
+
+Example w_elab_rejects_outside_fragment :
+  runW_elab (const_t 7) [] =
+  elaboration_rejected (elab_unsupported_constant 7).
+Proof. reflexivity. Qed.
+
+Example w_elab_preserves_missing_variable_failure :
+  runW_elab (var_t 42) [] =
+  elaboration_rejected (elab_missing_variable 42).
+Proof. reflexivity. Qed.
+
+Example w_elab_preserves_occurs_check_failure :
+  runW_elab (lam_t 0 (app_t (var_t 0) (var_t 0))) [] =
+  elaboration_rejected
+    (elab_unification_failure (var 0) (arrow (var 0) (var 1))).
+Proof. reflexivity. Qed.
+
 (** ** Type bridge from W to System F *)
 
 Definition test_constant_types (_ : id) : type := type1.
@@ -1156,6 +1317,240 @@ Proof.
   - cbn [free_variables_scoped].
     lia.
 Qed.
+
+(** ** Reification of W into explicit Church syntax *)
+
+Example dead_type_variable_default_is_closed_at_every_depth : forall n,
+  closed n reification_default_type.
+Proof. apply reification_default_type_closed. Qed.
+
+Example reifier_rejects_an_unbound_term_variable :
+  reify_w_elab_tree_semantic test_constant_types
+    reification_default_valuation []
+    (elab_variable 42 (sc_var 0) [] (var 0)) =
+  Err (reify_unbound_term_variable 42).
+Proof. reflexivity. Qed.
+
+Definition raw_hm_dead_internal_type_variable : RawChurch :=
+  RCTAbs
+    (RCAbs (TVar 0)
+      (RCApp
+        (RCAbs (TArrow type1 type1) (RCVar 1))
+        (RCAbs type1 (RCVar 0)))).
+
+(** The type of the unused [y] is ['2 -> '2], while ['2] does not occur in
+    the principal result ['3 -> '3].  It is therefore instantiated with the
+    closed reification default instead of causing a spurious rejection. *)
+Example runWChurch_defaults_a_dead_internal_type_variable :
+  match runWChurch test_constant_types hm_dead_internal_type_variable with
+  | Ok elaboration =>
+      raw_church_systemf_type elaboration = type1 /\
+      raw_church_term elaboration = raw_hm_dead_internal_type_variable
+  | Err _ => False
+  end.
+Proof. vm_compute; split; reflexivity. Qed.
+
+Example unchecked_reification_is_complete_for_successful_W : forall
+    expression,
+  (exists elaboration,
+    runWChurch_unchecked test_constant_types expression = Ok elaboration) <->
+  exists tau substitution tree,
+    runW_elab expression [] = elaborated tau substitution tree.
+Proof. apply runWChurch_unchecked_success_iff_runW_elab_success. Qed.
+
+Example every_successful_raw_W_reification_is_scoped : forall
+    expression elaboration,
+  runWChurch_unchecked test_constant_types expression = Ok elaboration ->
+  scoped 0 (raw_church_term elaboration).
+Proof.
+  intros expression elaboration Hchurch.
+  eapply runWChurch_unchecked_scoped.
+  - apply test_constant_types_are_closed.
+  - exact Hchurch.
+Qed.
+
+Example every_successful_raw_W_reification_checks_at_its_principal_type :
+  forall expression elaboration,
+  runWChurch_unchecked test_constant_types expression = Ok elaboration ->
+  exists checked : Checked 0 [] (raw_church_term elaboration),
+    checkClosed (raw_church_term elaboration) = Ok checked /\
+    projT1 checked =
+      hm_principal_type test_constant_types
+        (raw_church_hm_type elaboration).
+Proof.
+  intros expression elaboration Hchurch.
+  exact (runWChurch_unchecked_checkClosed_principal
+    test_constant_types expression elaboration
+    test_constant_types_are_closed Hchurch).
+Qed.
+
+Example type_arguments_are_left_associated :
+  apply_type_arguments (RCVar 0) [TVar 1; TVar 0] =
+  RCTApp (RCTApp (RCVar 0) (TVar 1)) (TVar 0).
+Proof. reflexivity. Qed.
+
+Definition hm_apply_expression : SystemF.HM.WInCoq.Typing.term :=
+  lam_t 0 (lam_t 1 (app_t (var_t 0) (var_t 1))).
+
+Definition raw_hm_apply_expression : RawChurch :=
+  RCTAbs
+    (RCTAbs
+      (RCAbs (TArrow (TVar 1) (TVar 0))
+        (RCAbs (TVar 1) (RCApp (RCVar 1) (RCVar 0))))).
+
+(** A full two-quantifier regression checks that reversing the binder stack
+    and emitting outer abstractions are paired operations. *)
+Example runWChurch_preserves_two_quantifier_order :
+  match runWChurch test_constant_types hm_apply_expression with
+  | Ok elaboration => Some (raw_church_term elaboration)
+  | Err _ => None
+  end = Some raw_hm_apply_expression.
+Proof. reflexivity. Qed.
+
+Example reified_two_quantifier_term_is_accepted :
+  certified_closed_type raw_hm_apply_expression =
+  Some
+    (TForall
+      (TForall
+        (TArrow
+          (TArrow (TVar 1) (TVar 0))
+          (TArrow (TVar 1) (TVar 0))))).
+Proof. reflexivity. Qed.
+
+Definition raw_hm_let_identity_self_application : RawChurch :=
+  RCTAbs
+    (RCApp
+      (RCAbs
+        (TForall (TArrow (TVar 0) (TVar 0)))
+        (RCApp
+          (RCTApp (RCVar 0) (TArrow (TVar 0) (TVar 0)))
+          (RCTApp (RCVar 0) (TVar 0))))
+      (RCTAbs (RCAbs (TVar 0) (RCVar 0)))).
+
+Definition hm_let_identity_self_application_church_result :
+    RawChurchElaboration :=
+  {| raw_church_hm_type := arrow (var 2) (var 2);
+     raw_church_substitution :=
+       hm_let_identity_self_application_substitution;
+     raw_church_tree := hm_let_identity_self_application_tree;
+     raw_church_systemf_type := type1;
+     raw_church_term := raw_hm_let_identity_self_application |}.
+
+(** This freezes the full bridge, including the two distinct occurrences
+    [id [a -> a]] and [id [a]] and the [let]-bound [Lambda]. *)
+Example runWChurch_builds_the_expected_raw_term :
+  runWChurch test_constant_types hm_let_identity_self_application =
+  Ok hm_let_identity_self_application_church_result.
+Proof. reflexivity. Qed.
+
+Example runWChurch_end_to_end_type_bridge :
+  exists checked : Checked 0 [] raw_hm_let_identity_self_application,
+    checkClosed raw_hm_let_identity_self_application = Ok checked /\
+    projT1 checked = type1 /\
+    infer_systemf_type_exec
+      test_constant_types hm_let_identity_self_application = Some type1.
+Proof.
+  exact
+    (runWChurch_type_bridge
+      test_constant_types
+      hm_let_identity_self_application
+      hm_let_identity_self_application_church_result
+      runWChurch_builds_the_expected_raw_term).
+Qed.
+
+Example runWChurchChecked_retains_the_checker_certificate :
+  exists checked : CheckedChurchElaboration,
+    runWChurchChecked
+      test_constant_types hm_let_identity_self_application = Ok checked.
+Proof.
+  pose proof runWChurch_builds_the_expected_raw_term as Hraw.
+  unfold runWChurch in Hraw.
+  destruct (runWChurchChecked
+      test_constant_types hm_let_identity_self_application)
+    as [checked | error] eqn:Hchecked.
+  - now exists checked.
+  - discriminate.
+Qed.
+
+Example runWChurch_end_to_end_erasure_bridge :
+  erase_hm_closed hm_let_identity_self_application =
+  Some
+    (erase_raw
+      (raw_church_term hm_let_identity_self_application_church_result)).
+Proof.
+  exact
+    (runWChurch_preserves_erasure
+      test_constant_types
+      hm_let_identity_self_application
+      hm_let_identity_self_application_church_result
+      runWChurch_builds_the_expected_raw_term).
+Qed.
+
+Example checked_W_term_reaches_the_shared_untyped_syntax :
+  exists checked : CheckedChurchElaboration,
+    runWChurchChecked
+      test_constant_types hm_let_identity_self_application = Ok checked /\
+    checked_church_erasure checked =
+      erased_hm_let_identity_self_application.
+Proof.
+  destruct runWChurchChecked_retains_the_checker_certificate
+    as [checked Hchecked].
+  exists checked.
+  split; [exact Hchecked |].
+  pose proof
+    (runWChurchChecked_preserves_erasure
+      test_constant_types hm_let_identity_self_application
+      checked Hchecked) as Herasure.
+  rewrite hm_erasure_desugars_the_end_to_end_let in Herasure.
+  now inversion Herasure.
+Qed.
+
+(** ** Main W-to-System-F end-to-end acceptance test
+
+    Both downstream branches start from the same HM input.  The type branch
+    reaches the relational generator; the term branch retains the checked
+    intrinsic term, crosses the proved erasure bridge, and reaches the exact
+    weak-head evaluator.  The external bar-recursive bound is deliberately
+    not part of this fast test until stage 7 imports its repaired core. *)
+Example main_hm_systemf_pipeline_acceptance :
+  exists checked : CheckedChurchElaboration,
+    runWChurchChecked
+      test_constant_types hm_let_identity_self_application = Ok checked /\
+    checked_church_elaboration checked =
+      hm_let_identity_self_application_church_result /\
+    infer_relational_formula_exec
+      test_constant_types hm_let_identity_self_application =
+      Some polymorphic_identity_formula /\
+    checked_church_erasure checked =
+      erased_hm_let_identity_self_application /\
+    eval_cap 2 (checked_church_erasure checked) =
+      Some (2, Abs (Var 0)).
+Proof.
+  destruct checked_W_term_reaches_the_shared_untyped_syntax
+    as [checked [Hchecked Herasure]].
+  exists checked.
+  split; [exact Hchecked |].
+  split.
+  - pose proof runWChurch_builds_the_expected_raw_term as Hraw.
+    unfold runWChurch in Hraw.
+    rewrite Hchecked in Hraw.
+    cbn [erase_checked_church_result] in Hraw.
+    now inversion Hraw.
+  - split.
+    + reflexivity.
+    + split; [exact Herasure |].
+      rewrite Herasure.
+      reflexivity.
+Qed.
+
+Example reified_W_term_is_accepted_by_the_independent_checker :
+  certified_closed_type raw_hm_let_identity_self_application = Some type1.
+Proof. reflexivity. Qed.
+
+Example reified_W_term_has_the_expected_erasure :
+  erase_raw raw_hm_let_identity_self_application =
+  erased_hm_let_identity_self_application.
+Proof. reflexivity. Qed.
 
 Definition hm_identity_expression : SystemF.HM.WInCoq.Typing.term :=
   lam_t 0 (var_t 0).

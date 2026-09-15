@@ -1,8 +1,8 @@
 (** * Extraction driver
 
     Syntax, erasure, the independent weak-head reducer, the proof-free HM
-    inference ([unify_exec], [runW_exec]), its computational event trace, and
-    shared examples are exported.
+    inference ([unify_exec], [runW_exec]), its computational event trace, the
+    structural [W_elab] tree, and shared examples are exported.
     The dependent W-in-Coq [runW] and [unify''] stay inside Rocq as the
     reference proof; their equivalence with the extracted code is the
     theorem [runW_exec_checked_correspondence]. The Church checker is
@@ -21,7 +21,7 @@ From Stdlib Require Import Extraction ExtrOcamlBasic.
 From SystemF.F Require Import Syntax Check OperationalSemantics.
 From SystemF.FreeTheorems Require Import
   Formula Generate ListTheorem FilterTheorem NegativeTheorem Presentation.
-From SystemF.HM Require Import Infer Unify Examples.
+From SystemF.HM Require Import ElabScope Erasure Infer Unify Examples.
 From SystemF Require Import Examples HMElab.
 
 Extraction Language OCaml.
@@ -46,9 +46,22 @@ Extraction "systemf.ml"
   recognize_formula_church_type postprocess_relation
   relate_presented relgen_presented
   unify_exec runW_exec
+  constant_freeb lookup_binder erase_hm erase_hm_closed
+  hm_let_identity_self_application hm_dead_internal_type_variable
+  WElabFailure WElabTree w_elab_state_result w_elab_result
+  W_elab runW_elab erase_w_elab_state erase_w_elab_result
+  w_elab_tree_type w_elab_tree_source w_elab_instantiation_count
   WTraceFailure WTraceEvent WTraceResult runWTrace
   trace_instantiation_count trace_generalization_count trace_failure_count
   repeated_application hm_pair polymorphic_pair_application infer_exec_succeeds
   scheme_body_to_type quantify_scheme scheme_to_systemf
   hm_principal_scheme hm_principal_type
-  infer_systemf_type_exec infer_relational_formula_exec.
+  infer_systemf_type_exec infer_relational_formula_exec
+  ChurchReifyError WChurchError RawChurchElaboration
+  CheckedChurchElaboration
+  reification_default_type
+  apply_type_arguments wrap_type_abstractions
+  reify_w_elab_tree_semantic runWChurch_unchecked
+  certify_raw_church_elaboration erase_checked_church_result
+  validate_raw_church_elaboration runWChurchChecked runWChurch
+  checked_church_erasure.

@@ -19,7 +19,7 @@ adaptation of W-in-Coq.
 | W and its corrected unifier | Complete Rocq 9.1 adaptation: proof-free `unify_exec`/`W_exec`, checked success and rejection contracts, universal checked/executable correspondence, and an extracted event trace whose erasure is proved equal to `runW_exec` |
 | Relational formulas and generator | Complete: `relate_correct` proves generator correspondence, the separate abstraction lemma proves every intrinsic `fterm` logically related to itself, and `closed_fterm_satisfies_relgen` connects typed terms to generated formulas; `relate_presented` is a guarded post-pass over `relate`, with a general semantics-preservation theorem, and prints Church encodings as `Bool`, `[A]`, and `ListRel` |
 | Independent WH-reducer | Implemented with a capped exact-step oracle and Rocq correspondence proofs |
-| HM elaboration | Type level complete: W principal schemes are translated to closed System F types with explicit constant interpretation and checked/executable correspondence; term elaboration remains |
+| HM elaboration | Complete: semantic tree reification preserves W typing, dead internal variables default to `forall X. X -> X`, every constructed term is accepted by `checkClosed` exactly at `hm_principal_type`, and public `runWChurch` succeeds iff `W_elab` succeeds |
 | Repaired bound and BBC experiment | Root cause patched; term1 and term4 satisfy the independent oracle, term3 remains a slow acceptance run |
 | Surface parser | HM lecture fragment implemented: complete-input parsing, lexical name resolution, integer/`true` markers, and Church-pair expansion; explicit Church F input remains planned |
 | Benchmark runner | Saves baseline/repaired runs and full differential BBC traces |
@@ -52,12 +52,14 @@ make bench-help   # options for the separate experiment runner
 make check checks the build pipeline, audits the generated OCaml interface,
 kernel-checked weak-head, unification,
 proof-free W regressions, the universal checked/executable W bridge, the
+structural W elaborator and its source/type/result contracts,
 proof-carrying Church checker, the relational generator, and the W-to-System-F
-type bridge. The extracted demo checks the four shared Church inputs, one
-rejection, proof-free W, prints its successful Church-pair trace and failing
-occurs-check trace from parsed surface HM input, translates its principal
-type, and prints the generated theorem for `forall X. X -> X` both directly
-and through W. It also prints the readable free theorem for
+type and term bridges. The extracted demo checks the four shared Church inputs,
+one rejection and proof-free W; runs the main
+`let id = fun x -> x in id id` input through its retained Church certificate,
+exact two-step weak-head evaluation, and free-theorem branch; then prints its
+successful Church-pair trace and failing occurs-check trace from parsed surface
+HM input and translates its principal type. It also prints the readable free theorem for
 `forall a. [a] -> [a]`; Rocq proves that specialising `ListRel` to the graph
 of a function yields `map f (g xs) = g (map f xs)`. The demo also prints the
 `filter` formula with its necessary premise `R x y -> p x = q y`; Rocq derives
@@ -81,10 +83,15 @@ outside _CoqProject and is compiled by its own Makefile before dune runs.
 ~~~text
 theories/
   F/                 syntax, scope, Church checking, WH-semantics
+  F/RawTyping.v      extrinsic Church typing and checker completeness
   HM/                public W/unification facade and adapted W-in-Coq sources
   FreeTheorems/      formulas, generation, correctness
   BarRec/            repaired realizers and bound
-  HMElab.v           principal-scheme/type bridge from W to Church F
+  HMElab.v           principal-type bridge and W-tree reification to RawChurch
+  HM/ElabScope.v      decidable constant-free source fragment for W elaboration
+  HM/ElabSemantics.v  interpretation of W types, schemes, and substitutions
+  HM/Erasure.v        named HM scope and erasure to the common untyped term
+  HM/WElab.v          structural W tree and correspondence with checked W
   Examples.v         common inputs for proofs, extraction, and experiments
   Tests.v            fast algorithmic regressions
 extraction/
@@ -142,9 +149,22 @@ extracted code; the PCF project's blanket rejection of Obj.magic is not
 copied here. Inspect any casts and custom extraction constants explicitly.
 
 The hand-written HM parser consumes complete input, resolves lexical names,
-and sends its result to W; it remains outside Rocq's trusted kernel. A future
-explicit Church F parser will produce `RawChurch`, whose acceptance belongs to
-the extracted checker. The proof-free `unify_exec`/`runW_exec` and `runWTrace`
+and sends its result to W; it remains outside Rocq's trusted kernel. The
+verified-side `runWChurchChecked` now reifies W's structural decisions into
+`RawChurch`, validates the result through `checkClosed`, and retains its
+intrinsic `fterm`; its success theorem equates the checked type, W's
+translated principal type, and the type exposed by the bridge. The general
+erasure theorem identifies that intrinsic term with `erase_hm_closed` of the
+source. Internal W metavariables absent from the principal result are
+consistently instantiated with the fixed closed type `forall X. X -> X`;
+Rocq proves that structural reification then succeeds exactly when `W_elab`
+succeeds. The universal theorem
+`runWChurch_unchecked_checkClosed_principal` proves that every constructed raw
+term is accepted by `checkClosed` exactly at `hm_principal_type`; consequently
+the public `runWChurch` succeeds iff `W_elab` succeeds (for a closed constant
+interpretation). A future explicit Church F parser can target the
+same syntax, whose acceptance belongs to the extracted checker. The proof-free
+`unify_exec`/`runW_exec` and `runWTrace`
 are extracted and used by the OCaml driver; the dependent W-in-Coq `runW` and
 `unify''` stay inside Rocq as the reference proof. Rocq proves universal
 observational correspondence for W, including the final fresh-variable state

@@ -28,7 +28,11 @@
 !/bench/results/blot-baseline*.log
 !/bench/results/blot-repaired*.json
 !/bench/results/blot-repaired*.log
+!/bench/results/project-normalization*.json
+!/bench/results/project-normalization*.log
 !/bench/results/blot-trace-js-term1.tsv.gz
 !/bench/results/blot-trace-ocaml-baseline-term1.tsv.gz
 !/bench/results/blot-trace-ocaml-repaired-term1.tsv.gz
+!/bench/results/project-normalization-trace-term1.tsv.gz
+!/bench/results/project-normalization-trace-term1-pre-memo.tsv.gz
 __pycache__/

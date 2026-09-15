@@ -1,6 +1,6 @@
 COQMAKEFILE ?= coq_makefile
 
-.PHONY: all rocq extract demo check bench-help clean
+.PHONY: all rocq extract demo hm church brec-demo reference check normalization-oracle hm-evil bench-help clean
 all: rocq
 
 Makefile.coq: _CoqProject
@@ -15,7 +15,25 @@ extract:
 demo:
 	$(MAKE) -C extraction run
 
-check: demo
+hm:
+	$(MAKE) -C extraction hm
+
+church:
+	$(MAKE) -C extraction church
+
+brec-demo:
+	$(MAKE) -C extraction brec-demo
+
+reference:
+	ocaml reference/systemf_native.ml
+
+check: demo reference
+
+normalization-oracle:
+	$(MAKE) -C extraction normalization-oracle
+
+hm-evil:
+	$(MAKE) -C extraction hm-evil
 
 bench-help:
 	python3 bench/run.py --help

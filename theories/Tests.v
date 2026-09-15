@@ -10,12 +10,12 @@
 From Stdlib Require Import List Lia.
 Import ListNotations.
 
-From SystemF Require Import Examples HMElab.
+From SystemF Require Import CurryChurchBoundary Examples HMElab Normalization.
 From SystemF.F Require Import Syntax OPE Scope Check OperationalSemantics.
 From SystemF.FreeTheorems Require Import
   Formula Generate Correctness Fundamental ListTheorem FilterTheorem
   NegativeTheorem Presentation.
-From SystemF.HM Require Import ElabScope Erasure Infer Unify.
+From SystemF.HM Require Import ElabScope Erasure Infer TypeDAG Unify.
 Require Import SystemF.HM.Examples.
 
 (** ** Type-variable scope *)
@@ -726,6 +726,23 @@ Example checkClosed_accepts_shared_examples :
   certified_closed_type raw_term4 = Some type1.
 Proof. repeat split; reflexivity. Qed.
 
+(** ** Curry/Church boundary *)
+
+Example curry_church_boundary_kernel_regression :
+  erase_raw boundary_raw_polymorphic_identity = boundary_curry_identity /\
+  erase_raw boundary_raw_identity_at_identity_type = boundary_curry_identity /\
+  boundary_checked_type boundary_raw_polymorphic_identity =
+    Some boundary_identity_type /\
+  boundary_checked_type boundary_raw_identity_at_identity_type =
+    Some boundary_identity_arrow_type /\
+  erase_raw boundary_raw_type_application =
+    erase_raw boundary_raw_annotated_application /\
+  boundary_hm_identity_church_view =
+    Some
+      (boundary_identity_type,
+       boundary_raw_polymorphic_identity).
+Proof. repeat split; reflexivity. Qed.
+
 Example checkClosed_preserves_the_core_result : forall raw,
   erase_checked_result (checkClosed raw) = check_core 0 [] raw.
 Proof. apply checkClosed_core_correspondence. Qed.
@@ -952,6 +969,181 @@ Proof.
 Qed.
 
 (** ** Proof-free Algorithm W *)
+
+(** The generated source remains linear: every new level contributes one
+    [let], two applications, the pair variable, and two occurrences of the
+    previous value. *)
+Lemma hm_pair_dup_lets_has_linear_source_size : forall depth current,
+  hm_term_tree_size (hm_pair_dup_lets depth current) = 6 * depth + 1.
+Proof.
+  induction depth as [| depth IH]; intro current.
+  - reflexivity.
+  - cbn [hm_pair_dup_lets hm_pair_application hm_term_tree_size].
+    rewrite IH.
+    lia.
+Qed.
+
+Example hm_monomorphic_pair_dup_family_has_linear_source_size : forall depth,
+  hm_term_tree_size (hm_monomorphic_pair_dup_family depth) =
+  6 * depth + 11.
+Proof.
+  intro depth.
+  cbn [hm_monomorphic_pair_dup_family hm_term_tree_size].
+  rewrite hm_pair_dup_lets_has_linear_source_size.
+  unfold hm_pair.
+  cbn [hm_term_tree_size].
+  lia.
+Qed.
+
+Example hm_polymorphic_pair_dup_family_has_linear_source_size : forall depth,
+  hm_term_tree_size (hm_polymorphic_pair_dup_family depth) =
+  6 * depth + 13.
+Proof.
+  intro depth.
+  cbn [hm_polymorphic_pair_dup_family hm_term_tree_size].
+  rewrite hm_pair_dup_lets_has_linear_source_size.
+  unfold hm_pair.
+  cbn [hm_term_tree_size].
+  lia.
+Qed.
+
+Lemma hm_pair_dup_lets_is_constant_free : forall depth current,
+  constant_freeb (hm_pair_dup_lets depth current) = true.
+Proof.
+  induction depth as [| depth IH]; intro current.
+  - reflexivity.
+  - cbn [hm_pair_dup_lets hm_pair_application constant_freeb].
+    apply IH.
+Qed.
+
+Example hm_pair_dup_families_are_in_the_elaboration_fragment : forall depth,
+  constant_freeb (hm_monomorphic_pair_dup_family depth) = true /\
+  constant_freeb (hm_polymorphic_pair_dup_family depth) = true.
+Proof.
+  intro depth.
+  cbn [hm_monomorphic_pair_dup_family hm_polymorphic_pair_dup_family
+    hm_pair constant_freeb].
+  now rewrite !hm_pair_dup_lets_is_constant_free.
+Qed.
+
+Lemma hm_pair_dup_lets_names_scoped : forall depth current binders,
+  In 0 binders ->
+  In current binders ->
+  hm_names_scoped binders (hm_pair_dup_lets depth current).
+Proof.
+  induction depth as [| depth IH]; intros current binders Hpair Hcurrent.
+  - exact Hcurrent.
+  - cbn [hm_pair_dup_lets hm_pair_application hm_names_scoped].
+    repeat split; try assumption.
+    apply IH.
+    + now right.
+    + now left.
+Qed.
+
+Example hm_pair_dup_families_are_closed : forall depth,
+  hm_names_scoped [] (hm_monomorphic_pair_dup_family depth) /\
+  hm_names_scoped [] (hm_polymorphic_pair_dup_family depth).
+Proof.
+  intro depth.
+  split.
+  - cbn [hm_monomorphic_pair_dup_family hm_pair hm_names_scoped].
+    split.
+    + cbn. tauto.
+    + apply hm_pair_dup_lets_names_scoped; cbn; tauto.
+  - cbn [hm_polymorphic_pair_dup_family hm_pair hm_names_scoped].
+    split.
+    + cbn. tauto.
+    + split.
+      * cbn. tauto.
+      * apply hm_pair_dup_lets_names_scoped; cbn; tauto.
+Qed.
+
+Example hm_pair_dup_families_have_closed_erasures : forall depth,
+  (exists erased,
+    erase_hm_closed (hm_monomorphic_pair_dup_family depth) = Some erased) /\
+  (exists erased,
+    erase_hm_closed (hm_polymorphic_pair_dup_family depth) = Some erased).
+Proof.
+  intro depth.
+  destruct (hm_pair_dup_families_are_in_the_elaboration_fragment depth)
+    as [Hmono_free Hpoly_free].
+  destruct (hm_pair_dup_families_are_closed depth)
+    as [Hmono_scoped Hpoly_scoped].
+  split; apply (proj2 (erase_hm_closed_success_iff _)); split.
+  - now apply (proj1 (constant_freeb_true_iff _)).
+  - exact Hmono_scoped.
+  - now apply (proj1 (constant_freeb_true_iff _)).
+  - exact Hpoly_scoped.
+Qed.
+
+(** These are measurements, not a lower-bound theorem.  They freeze the
+    intended contrast: linear source sizes versus rapidly duplicated type
+    trees, with the let-polymorphic variant already larger at each positive
+    depth because both copies receive fresh instantiations. *)
+Example hm_monomorphic_pair_dup_type_tree_sizes :
+  map
+    (fun depth =>
+      inferred_type_tree_size (hm_monomorphic_pair_dup_family depth))
+    [0; 1; 2; 3] =
+  [Some 3; Some 9; Some 21; Some 45].
+Proof. reflexivity. Qed.
+
+Example hm_polymorphic_pair_dup_type_tree_sizes :
+  map
+    (fun depth =>
+      inferred_type_tree_size (hm_polymorphic_pair_dup_family depth))
+    [0; 1; 2; 3] =
+  [Some 3; Some 11; Some 27; Some 59].
+Proof. reflexivity. Qed.
+
+(** Hash-consing is visible in the representation: the two equal children of
+    the arrow point to identifier zero rather than storing two variable
+    nodes. *)
+Example type_dag_shares_equal_arrow_children :
+  type_to_dag (arrow (var 0) (var 0)) =
+  {| type_dag_nodes :=
+       [type_dag_var 0; type_dag_arrow 0 0];
+     type_dag_root := 1;
+     type_dag_height := 2 |}.
+Proof. reflexivity. Qed.
+
+Example type_dag_shared_arrow_decodes :
+  type_dag_decode (type_to_dag (arrow (var 0) (var 0))) =
+  Some (arrow (var 0) (var 0)).
+Proof. apply type_to_dag_correct. Qed.
+
+(** With a genuinely monomorphic fixed-result pair, the ordinary tree doubles
+    its previous payload while the maximally shared DAG adds exactly three
+    arrow nodes at each positive depth. *)
+Example hm_monomorphic_shared_pair_type_tree_sizes :
+  map hm_monomorphic_shared_pair_type_tree_size [0; 1; 2; 3; 4] =
+  [1; 7; 19; 43; 91].
+Proof. reflexivity. Qed.
+
+Example hm_monomorphic_shared_pair_type_dag_sizes :
+  map hm_monomorphic_shared_pair_type_dag_size [0; 1; 2; 3; 4] =
+  [1; 5; 8; 11; 14].
+Proof. reflexivity. Qed.
+
+(** The real source language has no primitive product, so its Church pair has
+    a generalized result variable.  Even the lambda-bound-base family loses
+    part of the ideal sharing; fresh let-polymorphic instantiations lose more.
+    These exact DAG measurements keep the distinction honest. *)
+Example hm_monomorphic_pair_dup_type_dag_sizes :
+  map
+    (fun depth =>
+      inferred_type_dag_size (hm_monomorphic_pair_dup_family depth))
+    [0; 1; 2; 3] =
+  [Some 2; Some 6; Some 14; Some 30].
+Proof. reflexivity. Qed.
+
+Example hm_polymorphic_pair_dup_type_dag_sizes :
+  map
+    (fun depth =>
+      inferred_type_dag_size (hm_polymorphic_pair_dup_family depth))
+    [0; 1; 2; 3] =
+  [Some 2; Some 8; Some 20; Some 44].
+Proof. reflexivity. Qed.
 
 Example w_exec_repeated_application :
   runW_exec repeated_application [] =
@@ -1541,6 +1733,49 @@ Proof.
     + split; [exact Herasure |].
       rewrite Herasure.
       reflexivity.
+Qed.
+
+(** The normalization wrapper does not reconstruct or separately erase the
+    term: its reducer input is the erasure already retained by the checked
+    W-to-Church pipeline. *)
+Example main_W_normalization_wrapper_uses_the_common_erasure : forall
+    normalization,
+  runWNormalization
+    test_constant_types hm_let_identity_self_application = Ok normalization ->
+  normalization_erasure normalization =
+  erased_hm_let_identity_self_application.
+Proof.
+  intros normalization Hnormalization.
+  pose proof
+    (runWNormalization_preserves_erasure
+      test_constant_types hm_let_identity_self_application
+      normalization Hnormalization) as Herasure.
+  rewrite hm_erasure_desugars_the_end_to_end_let in Herasure.
+  now inversion Herasure.
+Qed.
+
+Example every_successful_W_normalization_uses_its_bound_as_fuel : forall
+    constants expression normalization,
+  runWNormalization constants expression = Ok normalization ->
+  normalization_result normalization =
+  run_fuel
+    (normalization_bound normalization)
+    (normalization_erasure normalization).
+Proof. apply runWNormalization_result. Qed.
+
+(** The default frontend avoids the pathological BBC expansion on this small
+    term: the independent evaluator supplies its exact two-step bound. *)
+Example main_W_normalization_takes_the_exact_fast_path :
+  exists normalization,
+    runWNormalization
+      test_constant_types hm_let_identity_self_application =
+      Ok normalization /\
+    normalization_bound_source normalization = exact_evaluation_bound /\
+    normalization_bound normalization = 2 /\
+    normalization_result normalization = Abs (Var 0).
+Proof.
+  eexists.
+  repeat split; reflexivity.
 Qed.
 
 Example reified_W_term_is_accepted_by_the_independent_checker :

@@ -1,4 +1,23 @@
+(library
+ (name systemf_runtime)
+ (wrapped false)
+ (modules barrec_trace systemf)
+ (flags (:standard -w -a)))
+
 (executable
  (name main)
- (modules systemf parser main)
+ (modules parser church_parser main)
+ (libraries systemf_runtime)
+ (flags (:standard -w -a)))
+
+(executable
+ (name normalization_oracle)
+ (modules normalization_oracle)
+ (libraries systemf_runtime unix)
+ (flags (:standard -w -a)))
+
+(executable
+ (name hm_evil)
+ (modules hm_evil)
+ (libraries systemf_runtime unix)
  (flags (:standard -w -a)))

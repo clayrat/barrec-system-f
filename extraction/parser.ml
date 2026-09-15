@@ -241,8 +241,8 @@ and parse_atom state =
       end
   | _ -> fail_at token.span.start_offset "expected an expression"
 
-let rec nat_of_nonnegative_int value =
-  if value <= 0 then O else S (nat_of_nonnegative_int (value - 1))
+let nat_of_nonnegative_int value =
+  if value < 0 then invalid_arg "nat_of_nonnegative_int" else value
 
 type resolver_state = {
   mutable next_identifier : int;
@@ -251,6 +251,8 @@ type resolver_state = {
 
 let fresh_identifier state =
   let identifier = state.next_identifier in
+  if identifier = max_int then
+    fail_at 0 "too many binders for native natural-number extraction";
   state.next_identifier <- identifier + 1;
   nat_of_nonnegative_int identifier
 
@@ -281,7 +283,7 @@ let rec resolve state environment = function
       state.uses_pair <- true;
       let resolved_left = resolve state environment left in
       let resolved_right = resolve state environment right in
-      App_t (App_t (Var_t O, resolved_left), resolved_right)
+      App_t (App_t (Var_t 0, resolved_left), resolved_right)
 
 let parse_hm_program source =
   try
@@ -296,7 +298,7 @@ let parse_hm_program source =
     (* Identifier zero is reserved for the injected Church pair. *)
     let resolver = { next_identifier = 1; uses_pair = false } in
     let body = resolve resolver [] surface in
-    if resolver.uses_pair then Parsed (Let_t (O, hm_pair, body))
+    if resolver.uses_pair then Parsed (Let_t (0, hm_pair, body))
     else Parsed body
   with Frontend_error diagnostic -> Parse_error diagnostic
 

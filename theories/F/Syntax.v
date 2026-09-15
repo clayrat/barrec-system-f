@@ -8,10 +8,10 @@
     [fterm] records typing, but does not enforce type-variable scope;
     that additional invariant belongs to F.Scope and F.Check.
 
-    The artifact's simultaneous [term_subst] is not copied: the reducer in
-    F.OperationalSemantics uses its own [term_subst1], and the artifact's
-    substitution defect is repaired separately in
-    patches/blot-f.v-bound.patch for the bound experiments. *)
+    The artifact's simultaneous [term_subst] is not part of this shared
+    syntax: the reducer in [F.OperationalSemantics] uses its independent
+    [term_subst1], while [BarRec.Bound] contains the repaired simultaneous
+    substitution needed by the extracted bound. *)
 
 From Stdlib Require Import Arith List.
 Import ListNotations.

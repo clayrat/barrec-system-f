@@ -200,3 +200,24 @@ Proof.
       * constructor.
       * apply wh_step_none_iff_whnf. exact Hstep.
 Qed.
+
+(** A successful exact evaluation supplies not only a relational trace but
+    also fuel that reproduces its reported weak-head normal form. *)
+Lemma eval_cap_run_fuel :
+  forall fuel t steps normal_form,
+    eval_cap fuel t = Some (steps, normal_form) ->
+    run_fuel steps t = normal_form.
+Proof.
+  induction fuel as [| fuel IHfuel];
+    intros t steps normal_form Heval; simpl in Heval.
+  - destruct (wh_step t) as [t' |] eqn:Hstep; try discriminate.
+    inversion Heval; reflexivity.
+  - destruct (wh_step t) as [t' |] eqn:Hstep.
+    + destruct (eval_cap fuel t') as [[steps' normal_form'] |]
+          eqn:Hrecursive; try discriminate.
+      inversion Heval; subst.
+      simpl.
+      rewrite Hstep.
+      now apply IHfuel.
+    + inversion Heval; reflexivity.
+Qed.

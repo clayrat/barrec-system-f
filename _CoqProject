@@ -35,6 +35,7 @@ theories/HM/WInCoq/Unify.v
 theories/HM/WInCoq/Infer.v
 theories/HM/UnifySpec.v
 theories/HM/UnifyFailure.v
+theories/HM/TypeDAG.v
 theories/HM/UnifyExec.v
 theories/HM/UnifyExecCorrect.v
 theories/HM/Unify.v
@@ -57,5 +58,7 @@ theories/FreeTheorems/NegativeTheorem.v
 theories/FreeTheorems/Presentation.v
 theories/BarRec/Bound.v
 theories/HMElab.v
+theories/CurryChurchBoundary.v
+theories/Normalization.v
 theories/Examples.v
 theories/Tests.v

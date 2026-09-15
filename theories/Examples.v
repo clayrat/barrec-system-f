@@ -3,7 +3,9 @@
     Keep the identifiers used by the existing bound experiment.
     [term1] and [term2] reproduce the examples in Blot's artifact.
     [term3] and [term4] are the one-beta-step regression inputs described
-    in the plan. Their bounds have not been repaired or recomputed here. *)
+    in the plan.  The repaired implementation now lives in [BarRec.Bound];
+    its potentially slow numerical runs remain in the separate benchmark
+    harness. *)
 
 From Stdlib Require Import List.
 Import ListNotations.

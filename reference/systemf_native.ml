@@ -51,6 +51,14 @@ let rec ftype_eq left right =
   | TForall body1, TForall body2 -> ftype_eq body1 body2
   | _ -> false
 
+let rec eterm_eq left right =
+  match left, right with
+  | EVar i, EVar j -> i = j
+  | ELam body1, ELam body2 -> eterm_eq body1 body2
+  | EApp (f1, a1), EApp (f2, a2) ->
+      eterm_eq f1 f2 && eterm_eq a1 a2
+  | _ -> false
+
 let rec ftype_closed depth = function
   | TVar ix -> ix < depth
   | TArrow (dom, codom) ->
@@ -517,15 +525,15 @@ let rec duplicated_arrow_family depth ty =
 (* The native presentation uses names in the output AST.  The Rocq generator
    uses de Bruijn indices and proves [relate_correct]; naming here merely keeps
    the lecture view readable. *)
-type presented_type =
+type ptype =
   | PVar of string
-  | PArrow of presented_type * presented_type
-  | PForall of string * presented_type
+  | PArrow of ptype * ptype
+  | PForall of string * ptype
 
 type rel_val =
-  | VName of string
+  | VVar of string
   | VApply of rel_val * rel_val
-  | VTypeApply of rel_val * presented_type
+  | VTypeApply of rel_val * ptype
 
 type rel_formula =
   | RTrue
@@ -533,18 +541,18 @@ type rel_formula =
   | REqual of rel_val * rel_val
   | RAnd of rel_formula * rel_formula
   | RImplies of rel_formula * rel_formula
-  | RForallValue of string * presented_type * rel_formula
+  | RForallValue of string * ptype * rel_formula
   | RForallType of string * rel_formula
   | RForallRelation of
-      string * presented_type * presented_type * rel_formula
+      string * ptype * ptype * rel_formula
 
-type relation_binding = {
+type rel_bind = {
   left_type : string;
   right_type : string;
   relation_name : string;
 }
 
-type generator_state = {
+type gen_state = {
   mutable next_type_name : int;
   mutable next_value_name : int;
   mutable next_relation_name : int;
@@ -555,25 +563,25 @@ let fresh_name counter prefix =
   counter := ix + 1;
   prefix ^ string_of_int ix
 
-let fresh_presented_type state =
+let fresh_ptype state =
   let counter = ref state.next_type_name in
   let name = fresh_name counter "A" in
   state.next_type_name <- !counter;
   name
 
-let fresh_presented_value state side =
+let fresh_pval state side =
   let counter = ref state.next_value_name in
   let name = fresh_name counter side in
   state.next_value_name <- !counter;
   name
 
-let fresh_presented_relation state =
+let fresh_prel state =
   let counter = ref state.next_relation_name in
   let name = fresh_name counter "R" in
   state.next_relation_name <- !counter;
   name
 
-let relation_binding_at env ix =
+let rel_bind_at env ix =
   match nth_opt ix env with
   | Some binding -> binding
   | None ->
@@ -588,14 +596,14 @@ type projection = Left | Right
 
 let rec project_type state side env = function
   | TVar ix ->
-      let binding = relation_binding_at env ix in
+      let binding = rel_bind_at env ix in
       PVar (match side with Left -> binding.left_type | Right -> binding.right_type)
   | TArrow (dom, codom) ->
       PArrow
         (project_type state side env dom,
          project_type state side env codom)
   | TForall body ->
-      let name = fresh_presented_type state in
+      let name = fresh_ptype state in
       let local =
         { left_type = name; right_type = name; relation_name = "_" }
       in
@@ -604,13 +612,13 @@ let rec project_type state side env = function
 let rec relate state env ty left right =
   match ty with
   | TVar ix ->
-      let binding = relation_binding_at env ix in
+      let binding = rel_bind_at env ix in
       RRelated (binding.relation_name, left, right)
   | TArrow (dom, codom) ->
-      let left_name = fresh_presented_value state "x" in
-      let right_name = fresh_presented_value state "y" in
-      let left_var = VName left_name in
-      let right_var = VName right_name in
+      let left_name = fresh_pval state "x" in
+      let right_name = fresh_pval state "y" in
+      let left_var = VVar left_name in
+      let right_var = VVar right_name in
       RForallValue
         (left_name, project_type state Left env dom,
          RForallValue
@@ -621,9 +629,9 @@ let rec relate state env ty left right =
                  (VApply (left, left_var))
                  (VApply (right, right_var)))))
   | TForall body ->
-      let left_name = fresh_presented_type state in
-      let right_name = fresh_presented_type state in
-      let relation_name = fresh_presented_relation state in
+      let left_name = fresh_ptype state in
+      let right_name = fresh_ptype state in
+      let relation_name = fresh_prel state in
       let left_type = PVar left_name in
       let right_type = PVar right_name in
       let binding = { left_type = left_name; right_type = right_name; relation_name } in
@@ -643,7 +651,7 @@ let generate_relation ty =
     next_value_name = 0;
     next_relation_name = 0;
   } in
-  relate state [] ty (VName "f") (VName "f")
+  relate state [] ty (VVar "f") (VVar "f")
 
 (* Church encodings used by the presentation pass. *)
 let church_bool =
@@ -658,13 +666,13 @@ let church_list element =
            TArrow (TVar 0, TVar 0)),
         TArrow (TVar 0, TVar 0)))
 
-let rec presented_type_contains var = function
+let rec ptype_contains var = function
   | PVar name -> name = var
   | PArrow (dom, codom) ->
-      presented_type_contains var dom
-      || presented_type_contains var codom
+      ptype_contains var dom
+      || ptype_contains var codom
   | PForall (name, body) ->
-      name <> var && presented_type_contains var body
+      name <> var && ptype_contains var body
 
 let bool_body binder = function
   | PArrow (PVar first, PArrow (PVar second, PVar third)) ->
@@ -677,37 +685,37 @@ let list_body binder = function
        PArrow (PVar third, PVar fourth))
     when first = binder && second = binder
          && third = binder && fourth = binder
-         && not (presented_type_contains binder element) ->
+         && not (ptype_contains binder element) ->
       Some element
   | _ -> None
 
-let rec pp_presented_type = function
+let rec pp_ptype = function
   | PForall (binder, body) when bool_body binder body -> "Bool"
   | PForall (binder, body) ->
       (match list_body binder body with
-       | Some element -> "[" ^ pp_presented_type element ^ "]"
-       | None -> "forall " ^ binder ^ ". " ^ pp_presented_type body)
+       | Some element -> "[" ^ pp_ptype element ^ "]"
+       | None -> "forall " ^ binder ^ ". " ^ pp_ptype body)
   | PVar name -> name
   | PArrow (dom, codom) ->
       let dom_text =
         match dom with
-        | PArrow _ -> "(" ^ pp_presented_type dom ^ ")"
+        | PArrow _ -> "(" ^ pp_ptype dom ^ ")"
         | PForall (binder, body)
           when bool_body binder body || Option.is_some (list_body binder body) ->
-            pp_presented_type dom
-        | PForall _ -> "(" ^ pp_presented_type dom ^ ")"
-        | PVar _ -> pp_presented_type dom
+            pp_ptype dom
+        | PForall _ -> "(" ^ pp_ptype dom ^ ")"
+        | PVar _ -> pp_ptype dom
       in
-      dom_text ^ " -> " ^ pp_presented_type codom
+      dom_text ^ " -> " ^ pp_ptype codom
 
 let rec pp_rel_val = function
-  | VName name -> name
+  | VVar name -> name
   | VApply (f, arg) ->
       "(" ^ pp_rel_val f ^ " "
       ^ pp_rel_val arg ^ ")"
   | VTypeApply (f, arg) ->
       "(" ^ pp_rel_val f ^ " ["
-      ^ pp_presented_type arg ^ "])"
+      ^ pp_ptype arg ^ "])"
 
 let rec pp_rel_formula = function
   | RTrue -> "True"
@@ -722,15 +730,31 @@ let rec pp_rel_formula = function
       "(" ^ pp_rel_formula premise ^ " -> "
       ^ pp_rel_formula conclusion ^ ")"
   | RForallValue (name, ty, body) ->
-      "forall " ^ name ^ " : " ^ pp_presented_type ty ^ ". "
+      "forall " ^ name ^ " : " ^ pp_ptype ty ^ ". "
       ^ pp_rel_formula body
   | RForallType (name, body) ->
       "forall " ^ name ^ " : Type. " ^ pp_rel_formula body
   | RForallRelation (name, left, right, body) ->
-      "forall " ^ name ^ " : " ^ pp_presented_type left ^ " -> "
-      ^ pp_presented_type right ^ " -> Prop. " ^ pp_rel_formula body
+      "forall " ^ name ^ " : " ^ pp_ptype left ^ " -> "
+      ^ pp_ptype right ^ " -> Prop. " ^ pp_rel_formula body
 
 (* ===== The custom bar-recursion extraction boundary ===== *)
+
+(* The demand-driven recursion stripped of both the per-call cache and
+   the observation hooks: every query reaches the finite state, so a repeated
+   pure query is recomputed.  It must agree with [memoized_brec] on results. *)
+let naive_brec f g init_state =
+  let rec run state =
+    g (fun key ->
+        match state key with
+        | Some value -> value
+        | None ->
+            f (fun answer ->
+                run (fun query ->
+                      if eterm_eq query key then Some answer
+                      else state query)))
+  in
+  run init_state
 
 type cache_source = State_cache | Local_cache
 
@@ -740,19 +764,11 @@ type brec_event =
   | BMiss of int * eterm
   | BUpdate of int * int * eterm
 
-let rec eterm_eq left right =
-  match left, right with
-  | EVar i, EVar j -> i = j
-  | ELam body1, ELam body2 -> eterm_eq body1 body2
-  | EApp (f1, a1), EApp (f2, a2) ->
-      eterm_eq f1 f2 && eterm_eq a1 a2
-  | _ -> false
-
 let assoc_term key entries =
   let rec search = function
     | [] -> None
-    | (candidate, value) :: _ when eterm_eq key candidate ->
-        Some value
+    | (cand, v) :: _ when eterm_eq key cand ->
+        Some v
     | _ :: rest -> search rest
   in
   search entries
@@ -778,11 +794,11 @@ let memoized_brec ?(emit = fun _ -> ()) f g initial_state =
                   value
               | None ->
                   emit (BMiss (depth, key));
-                  let next_candidate = ref 0 in
+                  let next_cand = ref 0 in
                   f (fun answer ->
-                      let candidate = !next_candidate in
-                      next_candidate := candidate + 1;
-                      emit (BUpdate (depth + 1, candidate, key));
+                      let cand = !next_cand in
+                      next_cand := cand + 1;
+                      emit (BUpdate (depth + 1, cand, key));
                       run (depth + 1)
                         (fun query ->
                            if eterm_eq query key then Some answer
@@ -795,7 +811,7 @@ let memoized_brec ?(emit = fun _ -> ()) f g initial_state =
 
 (* ===== Pretty printers ===== *)
 
-let rec pp_ftype_with names precedence = function
+let rec pp_ftype_with names prec = function
   | TVar ix ->
       (match nth_opt ix names with
        | Some name -> name
@@ -805,11 +821,11 @@ let rec pp_ftype_with names precedence = function
         pp_ftype_with names 1 dom ^ " -> "
         ^ pp_ftype_with names 0 codom
       in
-      if precedence > 0 then "(" ^ text ^ ")" else text
+      if prec > 0 then "(" ^ text ^ ")" else text
   | TForall body ->
       let name = "X" ^ string_of_int (List.length names) in
       let text = "forall " ^ name ^ ". " ^ pp_ftype_with (name :: names) 0 body in
-      if precedence > 0 then "(" ^ text ^ ")" else text
+      if prec > 0 then "(" ^ text ^ ")" else text
 
 let pp_ftype ty = pp_ftype_with [] 0 ty
 
@@ -945,6 +961,15 @@ let run_brec_smoke () =
   in
   result, List.rev !events
 
+(* A repeated pure query: [memoized_brec] answers the second one from its
+   local cache, [naive_brec] recomputes it.  Both must return the same value. *)
+let run_brec_comparison () =
+  let key = EVar 0 in
+  let demand continue = continue 7 in
+  let query oracle = oracle key + oracle key in
+  memoized_brec demand query (fun _ -> None),
+  naive_brec demand query (fun _ -> None)
+
 let run_examples () =
   assert (check_closed polymorphic_identity = Ok polymorphic_identity_type);
   assert (check_closed explicit_type_application = Ok polymorphic_identity_type);
@@ -986,6 +1011,8 @@ let run_examples () =
     (List.exists
        (function BHit (_, State_cache, _) -> true | _ -> false)
        brec_trace);
+  let memo_result, naive_result = run_brec_comparison () in
+  assert (memo_result = naive_result);
 
   print_endline "Native System F reference:";
   Printf.printf "\nChurch checker and WH reducer:\n";
@@ -1008,7 +1035,7 @@ let run_examples () =
 
   Printf.printf "\nRelational generator:\n";
   Printf.printf "  type: %s\n"
-    (pp_presented_type (presented_closed_type polymorphic_list_endomorphism));
+    (pp_ptype (presented_closed_type polymorphic_list_endomorphism));
   Printf.printf "  forall a. a -> a:\n    %s\n" (pp_rel_formula identity_formula);
   Printf.printf "  forall a. [a] -> [a]:\n    %s\n" (pp_rel_formula list_formula);
   Printf.printf "  negative occurrence:\n    %s\n" (pp_rel_formula negative_formula);

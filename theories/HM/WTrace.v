@@ -13,7 +13,7 @@ From Stdlib Require Import List PeanoNat.
 Import ListNotations.
 
 From SystemF.HM Require Import Unify WExec.
-From SystemF.HM.WInCoq Require Import
+From SystemF.HM.W Require Import
   Context Gen Schemes SubstSchm Typing.
 
 Inductive WTraceFailure : Set :=
@@ -57,7 +57,7 @@ Definition trace_state_events
     are shared with the event payloads; the uninstrumented algorithm is not
     called as a second pass. *)
 Fixpoint W_trace_exec
-    (expression : term) (environment : ctx) (state : id)
+    (expression : hmterm) (environment : hmctx) (state : id)
     : w_trace_state_result :=
   match expression with
   | const_t constant =>
@@ -118,9 +118,9 @@ Fixpoint W_trace_exec
                     (prefix ++
                       [trace_fail (trace_unification_failure left right)])
               | unified unifier =>
-                  let argument_then_unifier := compose_subst s2 unifier in
+                  let argument_then_unifier := comp_subst s2 unifier in
                   let final_substitution :=
-                    compose_subst s1 argument_then_unifier in
+                    comp_subst s1 argument_then_unifier in
                   traced_state_success
                     (apply_subst unifier (var alpha))
                     final_substitution
@@ -147,7 +147,7 @@ Fixpoint W_trace_exec
               traced_state_rejected
                 (bound_events ++ generalization :: body_events)
           | traced_state_success tau2 s2 state2 body_events =>
-              let final_substitution := compose_subst s1 s2 in
+              let final_substitution := comp_subst s1 s2 in
               traced_state_success tau2 final_substitution state2
                 (bound_events ++ generalization :: body_events ++
                   [trace_compose s1 s2 final_substitution])
@@ -160,7 +160,7 @@ Record WTraceResult : Set := {
   trace_events : list WTraceEvent
 }.
 
-Definition runWTrace (expression : term) (environment : ctx) : WTraceResult :=
+Definition runWTrace (expression : hmterm) (environment : hmctx) : WTraceResult :=
   match W_trace_exec expression environment (initial_state_exec environment) with
   | traced_state_success tau substitution _ events =>
       {| trace_result := inferred tau substitution;

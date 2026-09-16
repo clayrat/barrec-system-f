@@ -11,13 +11,13 @@ open Systemf
 
 let rec pp_term = function
   | Var n -> Printf.sprintf "#%d" n
-  | Abs body -> Printf.sprintf "(lambda. %s)" (pp_term body)
+  | Lam body -> Printf.sprintf "(lambda. %s)" (pp_term body)
   | App (function_, argument) ->
       Printf.sprintf "(%s %s)" (pp_term function_) (pp_term argument)
 
 type fixture =
-  | Church of rawChurch
-  | HindleyMilner of term0
+  | Church of fterm
+  | HindleyMilner of hmterm
 
 let fixture depth = function
   | "term1" -> Church raw_term1
@@ -37,7 +37,7 @@ let fixture depth = function
       exit 64
 
 let erased_fixture = function
-  | Church raw -> erase_raw raw
+  | Church raw -> fterm_to_term raw
   | HindleyMilner expression ->
       (match erase_hm_closed expression with
        | Some erased -> erased

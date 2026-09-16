@@ -3,29 +3,29 @@
       and a bunch of auxiliary definitions.
     *)
 
-From SystemF.HM.WInCoq Require Import LibTactics.
-From SystemF.HM.WInCoq Require Import Unify.
+From SystemF.HM.W Require Import LibTactics.
+From SystemF.HM.W Require Import Unify.
 From SystemF.HM Require Import Unify.
-From SystemF.HM.WInCoq Require Import Sublist.
-From SystemF.HM.WInCoq Require Import Context.
-From SystemF.HM.WInCoq Require Import ListIds.
-From SystemF.HM.WInCoq Require Import Schemes.
-From SystemF.HM.WInCoq Require Import SubstSchm.
-From SystemF.HM.WInCoq Require Import Rename.
-From SystemF.HM.WInCoq Require Import Disjoints.
+From SystemF.HM.W Require Import Sublist.
+From SystemF.HM.W Require Import Context.
+From SystemF.HM.W Require Import ListIds.
+From SystemF.HM.W Require Import Schemes.
+From SystemF.HM.W Require Import SubstSchm.
+From SystemF.HM.W Require Import Rename.
+From SystemF.HM.W Require Import Disjoints.
 Require Import Program.
-From SystemF.HM.WInCoq Require Import Gen.
+From SystemF.HM.W Require Import Gen.
 Require Import Lia.
 Require Import Arith.
-From SystemF.HM.WInCoq Require Import Typing.
+From SystemF.HM.W Require Import Typing.
 Require Import List.
-From SystemF.HM.WInCoq Require Import NewTypeVariable.
-From SystemF.HM.WInCoq Require Import HoareMonad.
+From SystemF.HM.W Require Import NewTypeVariable.
+From SystemF.HM.W Require Import HoareMonad.
 Require Import Program.
-From SystemF.HM.WInCoq Require Import MoreGeneral.
-From SystemF.HM.WInCoq Require Import SimpleTypes.
-From SystemF.HM.WInCoq Require Import Subst.
-From SystemF.HM.WInCoq Require Import MyLtacs.
+From SystemF.HM.W Require Import MoreGeneral.
+From SystemF.HM.W Require Import SimpleTypes.
+From SystemF.HM.W Require Import Subst.
+From SystemF.HM.W Require Import MyLtacs.
 
 (** * A bunch of auxiliary definitions *)
 
@@ -60,7 +60,7 @@ Next Obligation.
 Defined.
 
 (** Look up function used in algorithm W. *)
-Program Definition look_dep (x : id) (G : ctx) :
+Program Definition look_dep (x : id) (G : hmctx) :
   @Infer (@top id) schm (fun i k f => i = f /\ in_ctx x G = Some k) :=
   match in_ctx x G with
   | Some sig => ret sig
@@ -74,8 +74,8 @@ Program Definition fresh : Infer (@top id) id (fun i x f => S i = f /\ i = x) :=
   fun n => exist _ (inl _ (n, S n)) _.
 
 (** Adds a fresh variable to the context *)
-Program Definition addFreshCtx (G : ctx) (x : id) (alpha : id):
-  @Infer (fun i => new_tv_ctx G i) ctx
+Program Definition addFreshCtx (G : hmctx) (x : id) (alpha : id):
+  @Infer (fun i => new_tv_ctx G i) hmctx
          (fun i r f => alpha < i -> (new_tv_ctx r f /\ f = i /\ new_tv_ty (var alpha) f)) :=
   ret ((x, ty_to_schm (var alpha)) :: G).
 Next Obligation.
@@ -84,7 +84,7 @@ Next Obligation.
 Defined.
 
 (** Completeness theorem definition. *)
-Definition completeness (e : term) (G : ctx) (tau : ty) (s : substitution) (st : id) :=
+Definition completeness (e : hmterm) (G : hmctx) (tau : ty) (s : substitution) (st : id) :=
   forall (tau' : ty) (phi : substitution),
     has_type (apply_subst_ctx phi G) e tau' -> 
     exists s', tau' = apply_subst s' tau /\
@@ -94,7 +94,7 @@ Unset Implicit Arguments.
 
 (** * The algorithm W itself *)
 
-Program Fixpoint W (e : term) (G : ctx) {struct e} :
+Program Fixpoint W (e : hmterm) (G : hmctx) {struct e} :
   @Infer (fun i => new_tv_ctx G i) (ty * substitution)
          (fun i x f => i <= f /\ new_tv_subst (snd x) f /\ new_tv_ty (fst x) f /\
                     new_tv_ctx (apply_subst_ctx (snd x) G) f /\
@@ -122,13 +122,13 @@ Program Fixpoint W (e : term) (G : ctx) {struct e} :
       s <- unify_exec_hoare
         (apply_subst (snd tau2_s2) (fst tau1_s1))
         (arrow (fst tau2_s2) (var alpha)) ;
-      ret (apply_subst s (var alpha), compose_subst  (snd tau1_s1) (compose_subst (snd tau2_s2) s))
+      ret (apply_subst s (var alpha), comp_subst  (snd tau1_s1) (comp_subst (snd tau2_s2) s))
 
   | let_t x e1 e2  =>
     tau1_s1 <- W e1 G  ;
       tau2_s2 <- W e2 ((x,gen_ty (fst tau1_s1)
                       (apply_subst_ctx (snd tau1_s1) G) )::(apply_subst_ctx (snd tau1_s1) G))  ;
-      ret (fst tau2_s2, compose_subst (snd tau1_s1) (snd tau2_s2))
+      ret (fst tau2_s2, comp_subst (snd tau1_s1) (snd tau2_s2))
   end. 
 Next Obligation.
   intros; unfold top; auto.
@@ -261,8 +261,8 @@ Next Obligation. (* Case: postcondition of application  *)
     rename H6 into COMP_L, H12 into COMP_R;
     rename x2 into tauL, x0 into tauLR.
   (* Subcase : new_tv_subst application *)
-  - apply new_tv_compose_subst; eauto.
-    apply new_tv_compose_subst; eauto.
+  - apply new_tv_comp_subst; eauto.
+    apply new_tv_comp_subst; eauto.
     eapply MGU'.
     splits; eauto.
     econstructor; eauto.
@@ -276,8 +276,8 @@ Next Obligation. (* Case: postcondition of application  *)
   (* Subcase : new_tv_ctx application *)
   - subst.
     eapply new_tv_s_ctx; eauto.
-    apply new_tv_compose_subst; eauto.
-    apply new_tv_compose_subst; eauto.
+    apply new_tv_comp_subst; eauto.
+    apply new_tv_comp_subst; eauto.
     eapply MGU'.
     splits; eauto.
     econstructor; eauto.
@@ -311,7 +311,7 @@ Next Obligation. (* Case: postcondition of application  *)
       simpl. destruct (eq_id_dec alpha alpha); intuition.
       erewrite (@add_subst_new_tv_ty psi2 alpha tauL); eauto.
       rewrite <- PRINC_R1.
-      erewrite <- (@new_tv_compose_subst_type psi1 s2 ((alpha, tau_r)::psi2) st1 tauLR); eauto.
+      erewrite <- (@new_tv_comp_subst_type psi1 s2 ((alpha, tau_r)::psi2) st1 tauLR); eauto.
       intros.
       erewrite add_subst_new_tv_ty; eauto. 
     }
@@ -328,11 +328,11 @@ Next Obligation. (* Case: postcondition of application  *)
       rewrite apply_compose_equiv.
       rewrite <- MGU.
       rewrite add_subst_new_tv_ty.
-      erewrite <- (new_tv_compose_subst_type psi1 s2 psi2); eauto.
+      erewrite <- (new_tv_comp_subst_type psi1 s2 psi2); eauto.
       apply new_tv_apply_subst_ty; auto.
       eapply new_tv_ty_trans_le; eauto. 
     + eapply COMP_R; eauto.
-      erewrite <- new_tv_compose_subst_ctx; eauto.
+      erewrite <- new_tv_comp_subst_ctx; eauto.
 Defined.
 Next Obligation.
   unfold top.
@@ -398,7 +398,7 @@ Next Obligation. (* Case : postcondition of let *)
     split; auto.
     intros.
     rewrite apply_compose_equiv.
-    erewrite <- (new_tv_compose_subst_type psi1 s2 psi2); eauto.
+    erewrite <- (new_tv_comp_subst_type psi1 s2 psi2); eauto.
     eapply COMP_e2.
     rewrite subst_add_type_scheme.
     eapply typing_in_a_more_general_ctx with
@@ -407,13 +407,13 @@ Next Obligation. (* Case : postcondition of let *)
     eapply more_general_ctx_cons. eauto.
     eapply more_general_gen_ty_before_apply_subst.
     rewrite <- PRINC_e11.
-    erewrite <- new_tv_compose_subst_ctx; eauto.
+    erewrite <- new_tv_comp_subst_ctx; eauto.
     Unshelve. eauto. eauto.
 Defined.
 
 Print Assumptions W.
 
-Program Fixpoint computeInitialState (G : ctx) : {s : id | new_tv_ctx G s} :=
+Program Fixpoint computeInitialState (G : hmctx) : {s : id | new_tv_ctx G s} :=
   match G with
   | nil => 0
   | (_, sigma)::G' => match computeInitialState G' with

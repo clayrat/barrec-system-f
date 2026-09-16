@@ -4,7 +4,7 @@ From SystemF.HM Require Import Infer UnifyFailure TypeDAG.
 
 (** Ordinary tree size of the source AST, used to contrast the linear input
     family below with the expanded tree representation of its inferred type. *)
-Fixpoint hm_term_tree_size (expression : term) : nat :=
+Fixpoint hm_term_tree_size (expression : hmterm) : nat :=
   match expression with
   | var_t _ | const_t _ => 1
   | app_t function argument =>
@@ -15,20 +15,20 @@ Fixpoint hm_term_tree_size (expression : term) : nat :=
   end.
 
 (** Observable size of the type tree returned by executable W. *)
-Definition inferred_type_tree_size (expression : term) : option nat :=
+Definition inferred_type_tree_size (expression : hmterm) : option nat :=
   match runW_exec expression nil with
   | inferred tau _ => Some (ty_size tau)
   | inference_rejected => None
   end.
 
 (** The same W result with all structurally equal type nodes hash-consed. *)
-Definition inferred_type_dag (expression : term) : option TypeDAG :=
+Definition inferred_type_dag (expression : hmterm) : option TypeDAG :=
   match runW_exec expression nil with
   | inferred tau _ => Some (type_to_dag tau)
   | inference_rejected => None
   end.
 
-Definition inferred_type_dag_size (expression : term) : option nat :=
+Definition inferred_type_dag_size (expression : hmterm) : option nat :=
   match inferred_type_dag expression with
   | Some graph => Some (type_dag_size graph)
   | None => None
@@ -37,7 +37,7 @@ Definition inferred_type_dag_size (expression : term) : option nat :=
 (** Compute both observables after one W run.  The extracted benchmark uses
     this entry point so measuring the DAG does not repeat inference. *)
 Definition inferred_type_representation_sizes
-    (expression : term) : option (nat * nat) :=
+    (expression : hmterm) : option (nat * nat) :=
   match runW_exec expression nil with
   | inferred tau _ =>
       Some (ty_size tau, type_dag_size (type_to_dag tau))
@@ -58,20 +58,20 @@ Qed.
 
 (** [fun f -> fun x -> let y = f x in f x], using numeric names as in
     W-in-Coq.  The bound occurrence of [y] is deliberately unused. *)
-Definition repeated_application : term :=
+Definition repeated_application : hmterm :=
   lam_t 0 (lam_t 1
     (let_t 2 (app_t (var_t 0) (var_t 1))
       (app_t (var_t 0) (var_t 1)))).
 
 (** Closed, constant-free end-to-end fixture for term elaboration:
     [let id = fun x => x in id id]. *)
-Definition hm_let_identity_self_application : term :=
+Definition hm_let_identity_self_application : hmterm :=
   let_t 0 (lam_t 1 (var_t 1))
     (app_t (var_t 0) (var_t 0)).
 
 (** A successful W term with an unconstrained type variable that occurs only
     in an internal annotation: [fun x -> (fun y -> x) (fun z -> z)]. *)
-Definition hm_dead_internal_type_variable : term :=
+Definition hm_dead_internal_type_variable : hmterm :=
   lam_t 0
     (app_t
       (lam_t 1 (var_t 0))
@@ -79,13 +79,13 @@ Definition hm_dead_internal_type_variable : term :=
 
 (** Church encoding of a pair constructor at the HM term level:
     [fun left right consumer => consumer left right]. *)
-Definition hm_pair : term :=
+Definition hm_pair : hmterm :=
   lam_t 2 (lam_t 3 (lam_t 4
     (app_t (app_t (var_t 4) (var_t 2)) (var_t 3)))).
 
 (** Apply the shared Church pair constructor.  Identifier [0] is reserved
     for the outer [pair] binding in the generated examples below. *)
-Definition hm_pair_application (left right : term) : term :=
+Definition hm_pair_application (left right : hmterm) : hmterm :=
   app_t (app_t (var_t 0) left) right.
 
 (** The common tail of the classic bad family
@@ -96,7 +96,7 @@ Definition hm_pair_application (left right : term) : term :=
     [current] is the source identifier of [x_i].  Names start at [1], since
     [0] denotes the single outer Church-pair binding.  This syntax is linear
     in [remaining]; it is the inferred type that may expand dramatically. *)
-Fixpoint hm_pair_dup_lets (remaining current : nat) : term :=
+Fixpoint hm_pair_dup_lets (remaining current : nat) : hmterm :=
   match remaining with
   | 0 => var_t current
   | S remaining' =>
@@ -114,7 +114,7 @@ Fixpoint hm_pair_dup_lets (remaining current : nat) : term :=
     Repeated occurrences of the type of [x_0] make its printed type tree
     exponential, although a representation that shares equal subtrees can
     retain a linear spine. *)
-Definition hm_monomorphic_pair_dup_family (depth : nat) : term :=
+Definition hm_monomorphic_pair_dup_family (depth : nat) : hmterm :=
   let_t 0 hm_pair
     (lam_t 1 (hm_pair_dup_lets depth 1)).
 
@@ -127,7 +127,7 @@ Definition hm_monomorphic_pair_dup_family (depth : nat) : term :=
     Each use of a generalized [x_i] is instantiated freshly.  The identity
     binder is chosen above every generated [x_i] name merely to keep printed
     source names unambiguous; lexical scoping would also permit shadowing. *)
-Definition hm_polymorphic_pair_dup_family (depth : nat) : term :=
+Definition hm_polymorphic_pair_dup_family (depth : nat) : hmterm :=
   let identity_name := S (S depth) in
   let_t 0 hm_pair
     (let_t 1 (lam_t identity_name (var_t identity_name))
@@ -169,20 +169,20 @@ Definition hm_monomorphic_shared_pair_type_dag_size (depth : nat) : nat :=
 
     Constants [0] and [1] are distinct type markers [con 0] and [con 1].
     There is no primitive product in the imported HM syntax. *)
-Definition polymorphic_pair_application : term :=
+Definition polymorphic_pair_application : hmterm :=
   let_t 0 hm_pair
     (let_t 1 (lam_t 2 (var_t 2))
       (app_t
         (app_t (var_t 0) (app_t (var_t 1) (const_t 0)))
         (app_t (var_t 1) (const_t 1)))).
 
-Definition infer_succeeds (e : term) : bool :=
+Definition infer_succeeds (e : hmterm) : bool :=
   match runW e nil with
   | inl _ => true
   | inr _ => false
   end.
 
-Definition infer_exec_succeeds (e : term) : bool :=
+Definition infer_exec_succeeds (e : hmterm) : bool :=
   match runW_exec e nil with
   | inferred _ _ => true
   | inference_rejected => false

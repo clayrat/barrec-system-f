@@ -65,7 +65,7 @@ let fresh_brec_id () =
     -1
 
 let key_var index = Printf.sprintf "#%d" index
-let key_abs body = Printf.sprintf "(lambda.%s)" body
+let key_lam body = Printf.sprintf "(lambda.%s)" body
 let key_app function_ argument = Printf.sprintf "(%s %s)" function_ argument
 
 let emit event =

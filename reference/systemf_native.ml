@@ -24,153 +24,156 @@
 (* ===== Explicit Church-style System F ===== *)
 
 type ftype =
+  | TVar of int
+  | TArrow of ftype * ftype
+  | TForall of ftype
+
+type fterm =
   | FVar of int
-  | FArrow of ftype * ftype
-  | FForall of ftype
+  | FLam of ftype * fterm
+  | FApp of fterm * fterm
+  | FTLam of fterm
+  | FTApp of fterm * ftype
 
-type raw_church =
-  | CVar of int
-  | CAbs of ftype * raw_church
-  | CApp of raw_church * raw_church
-  | CTAbs of raw_church
-  | CTApp of raw_church * ftype
-
-type erased_term =
+(* Erased, untyped lambda terms: the Curry-style view that [erase] produces
+   from a Church-style [fterm].  Type annotations, [FTLam] and [FTApp] all
+   disappear, so evaluation below never inspects a type. *)
+type eterm =
   | EVar of int
-  | EAbs of erased_term
-  | EApp of erased_term * erased_term
+  | ELam of eterm
+  | EApp of eterm * eterm
 
-let rec ftype_equal left right =
+let rec ftype_eq left right =
   match left, right with
-  | FVar i, FVar j -> i = j
-  | FArrow (a1, b1), FArrow (a2, b2) ->
-      ftype_equal a1 a2 && ftype_equal b1 b2
-  | FForall body1, FForall body2 -> ftype_equal body1 body2
+  | TVar i, TVar j -> i = j
+  | TArrow (a1, b1), TArrow (a2, b2) ->
+      ftype_eq a1 a2 && ftype_eq b1 b2
+  | TForall body1, TForall body2 -> ftype_eq body1 body2
   | _ -> false
 
 let rec ftype_closed depth = function
-  | FVar index -> index < depth
-  | FArrow (domain, codomain) ->
-      ftype_closed depth domain && ftype_closed depth codomain
-  | FForall body -> ftype_closed (depth + 1) body
+  | TVar ix -> ix < depth
+  | TArrow (dom, codom) ->
+      ftype_closed depth dom && ftype_closed depth codom
+  | TForall body -> ftype_closed (depth + 1) body
 
-let checked_index label index =
-  if index < 0 then invalid_arg (label ^ ": negative de Bruijn index")
-  else index
+let checked_ix label ix =
+  if ix < 0 then invalid_arg (label ^ ": negative de Bruijn index")
+  else ix
 
 let rec ftype_shift amount cutoff = function
-  | FVar index when index < cutoff -> FVar index
-  | FVar index -> FVar (checked_index "ftype_shift" (index + amount))
-  | FArrow (domain, codomain) ->
-      FArrow
-        (ftype_shift amount cutoff domain,
-         ftype_shift amount cutoff codomain)
-  | FForall body -> FForall (ftype_shift amount (cutoff + 1) body)
+  | TVar ix when ix < cutoff -> TVar ix
+  | TVar ix -> TVar (checked_ix "ftype_shift" (ix + amount))
+  | TArrow (dom, codom) ->
+      TArrow
+        (ftype_shift amount cutoff dom,
+         ftype_shift amount cutoff codom)
+  | TForall body -> TForall (ftype_shift amount (cutoff + 1) body)
 
-(* TAPL-style substitution.  [ftype_subst_top argument body] both replaces
+(* TAPL-style substitution.  [ftype_subst_top arg body] both replaces
    index zero and removes the surrounding universal binder. *)
-let rec ftype_subst index replacement = function
-  | FVar variable when variable = index ->
-      ftype_shift index 0 replacement
-  | FVar variable -> FVar variable
-  | FArrow (domain, codomain) ->
-      FArrow
-        (ftype_subst index replacement domain,
-         ftype_subst index replacement codomain)
-  | FForall body -> FForall (ftype_subst (index + 1) replacement body)
+let rec ftype_subst ix replacement = function
+  | TVar var when var = ix ->
+      ftype_shift ix 0 replacement
+  | TVar var -> TVar var
+  | TArrow (dom, codom) ->
+      TArrow
+        (ftype_subst ix replacement dom,
+         ftype_subst ix replacement codom)
+  | TForall body -> TForall (ftype_subst (ix + 1) replacement body)
 
-let ftype_subst_top argument body =
+let ftype_subst_top arg body =
   ftype_shift (-1) 0
-    (ftype_subst 0 (ftype_shift 1 0 argument) body)
+    (ftype_subst 0 (ftype_shift 1 0 arg) body)
 
 let rec erase = function
-  | CVar index -> EVar index
-  | CAbs (_, body) -> EAbs (erase body)
-  | CApp (function_, argument) -> EApp (erase function_, erase argument)
-  | CTAbs body -> erase body
-  | CTApp (function_, _) -> erase function_
+  | FVar ix -> EVar ix
+  | FLam (_, body) -> ELam (erase body)
+  | FApp (function_, arg) -> EApp (erase function_, erase arg)
+  | FTLam body -> erase body
+  | FTApp (function_, _) -> erase function_
 
-type church_error =
-  | Unbound_term_variable of int
-  | Ill_scoped_annotation of ftype
+type check_error =
+  | Unbound_term_var of int
+  | Ill_scoped_ann of ftype
   | Expected_arrow of ftype
-  | Argument_type_mismatch of ftype * ftype
+  | Arg_ty_mismatch of ftype * ftype
   | Expected_forall of ftype
 
-let rec nth_opt index = function
+let rec nth_opt ix = function
   | [] -> None
-  | value :: _ when index = 0 -> Some value
-  | _ :: rest when index > 0 -> nth_opt (index - 1) rest
+  | value :: _ when ix = 0 -> Some value
+  | _ :: rest when ix > 0 -> nth_opt (ix - 1) rest
   | _ -> None
 
-let rec check_church type_depth context = function
-  | CVar index ->
-      (match nth_opt index context with
+let rec check_fterm ty_depth ctx = function
+  | FVar ix ->
+      (match nth_opt ix ctx with
        | Some ty -> Ok ty
-       | None -> Error (Unbound_term_variable index))
-  | CAbs (domain, body) ->
-      if not (ftype_closed type_depth domain) then
-        Error (Ill_scoped_annotation domain)
+       | None -> Error (Unbound_term_var ix))
+  | FLam (dom, body) ->
+      if not (ftype_closed ty_depth dom) then
+        Error (Ill_scoped_ann dom)
       else
-        (match check_church type_depth (domain :: context) body with
-         | Ok codomain -> Ok (FArrow (domain, codomain))
+        (match check_fterm ty_depth (dom :: ctx) body with
+         | Ok codom -> Ok (TArrow (dom, codom))
          | Error error -> Error error)
-  | CApp (function_, argument) ->
-      (match check_church type_depth context function_ with
+  | FApp (function_, arg) ->
+      (match check_fterm ty_depth ctx function_ with
        | Error error -> Error error
-       | Ok (FArrow (domain, codomain)) ->
-           (match check_church type_depth context argument with
+       | Ok (TArrow (dom, codom)) ->
+           (match check_fterm ty_depth ctx arg with
             | Error error -> Error error
-            | Ok actual when ftype_equal domain actual -> Ok codomain
-            | Ok actual -> Error (Argument_type_mismatch (domain, actual)))
+            | Ok actual when ftype_eq dom actual -> Ok codom
+            | Ok actual -> Error (Arg_ty_mismatch (dom, actual)))
        | Ok actual -> Error (Expected_arrow actual))
-  | CTAbs body ->
-      let lifted_context = List.map (ftype_shift 1 0) context in
-      (match check_church (type_depth + 1) lifted_context body with
-       | Ok body_type -> Ok (FForall body_type)
+  | FTLam body ->
+      let lifted_ctx = List.map (ftype_shift 1 0) ctx in
+      (match check_fterm (ty_depth + 1) lifted_ctx body with
+       | Ok body_type -> Ok (TForall body_type)
        | Error error -> Error error)
-  | CTApp (function_, argument_type) ->
-      if not (ftype_closed type_depth argument_type) then
-        Error (Ill_scoped_annotation argument_type)
+  | FTApp (function_, arg_type) ->
+      if not (ftype_closed ty_depth arg_type) then
+        Error (Ill_scoped_ann arg_type)
       else
-        (match check_church type_depth context function_ with
+        (match check_fterm ty_depth ctx function_ with
          | Error error -> Error error
-         | Ok (FForall body) -> Ok (ftype_subst_top argument_type body)
+         | Ok (TForall body) -> Ok (ftype_subst_top arg_type body)
          | Ok actual -> Error (Expected_forall actual))
 
-let check_closed term = check_church 0 [] term
+let check_closed term = check_fterm 0 [] term
 
 (* ===== Independent weak-head reducer ===== *)
 
 let rec term_shift amount cutoff = function
-  | EVar index when index < cutoff -> EVar index
-  | EVar index -> EVar (checked_index "term_shift" (index + amount))
-  | EAbs body -> EAbs (term_shift amount (cutoff + 1) body)
-  | EApp (function_, argument) ->
+  | EVar ix when ix < cutoff -> EVar ix
+  | EVar ix -> EVar (checked_ix "term_shift" (ix + amount))
+  | ELam body -> ELam (term_shift amount (cutoff + 1) body)
+  | EApp (function_, arg) ->
       EApp
         (term_shift amount cutoff function_,
-         term_shift amount cutoff argument)
+         term_shift amount cutoff arg)
 
-let rec term_subst index replacement = function
-  | EVar variable when variable = index -> term_shift index 0 replacement
-  | EVar variable -> EVar variable
-  | EAbs body -> EAbs (term_subst (index + 1) replacement body)
-  | EApp (function_, argument) ->
+let rec term_subst ix replacement = function
+  | EVar var when var = ix -> term_shift ix 0 replacement
+  | EVar var -> EVar var
+  | ELam body -> ELam (term_subst (ix + 1) replacement body)
+  | EApp (function_, arg) ->
       EApp
-        (term_subst index replacement function_,
-         term_subst index replacement argument)
+        (term_subst ix replacement function_,
+         term_subst ix replacement arg)
 
-let term_subst_top argument body =
+let term_subst_top arg body =
   term_shift (-1) 0
-    (term_subst 0 (term_shift 1 0 argument) body)
+    (term_subst 0 (term_shift 1 0 arg) body)
 
 let rec wh_step = function
-  | EApp (EAbs body, argument) -> Some (term_subst_top argument body)
-  | EApp (function_, argument) ->
+  | EApp (ELam body, arg) -> Some (term_subst_top arg body)
+  | EApp (function_, arg) ->
       (match wh_step function_ with
-       | Some function' -> Some (EApp (function', argument))
+       | Some function' -> Some (EApp (function', arg))
        | None -> None)
-  | EVar _ | EAbs _ -> None
+  | EVar _ | ELam _ -> None
 
 let rec eval_cap fuel term =
   match wh_step term with
@@ -202,132 +205,132 @@ type scheme = {
   body : hm_type;
 }
 
-type substitution = (int * hm_type) list
-type environment = (int * scheme) list
+type subst = (int * hm_type) list
+type env = (int * scheme) list
 
-let rec hm_type_equal left right =
+let rec hm_type_eq left right =
   match left, right with
   | HVar i, HVar j | HCon i, HCon j -> i = j
   | HArrow (a1, b1), HArrow (a2, b2) ->
-      hm_type_equal a1 a2 && hm_type_equal b1 b2
+      hm_type_eq a1 a2 && hm_type_eq b1 b2
   | _ -> false
 
-let rec hm_free_variables = function
-  | HVar variable -> IntSet.singleton variable
+let rec hm_free_vars = function
+  | HVar var -> IntSet.singleton var
   | HCon _ -> IntSet.empty
-  | HArrow (domain, codomain) ->
-      IntSet.union (hm_free_variables domain) (hm_free_variables codomain)
+  | HArrow (dom, codom) ->
+      IntSet.union (hm_free_vars dom) (hm_free_vars codom)
 
-let scheme_free_variables scheme =
+let scheme_free_vars scheme =
   List.fold_left
-    (fun variables quantified -> IntSet.remove quantified variables)
-    (hm_free_variables scheme.body)
+    (fun vars quantified -> IntSet.remove quantified vars)
+    (hm_free_vars scheme.body)
     scheme.quantified
 
-let environment_free_variables environment =
+let env_free_vars env =
   List.fold_left
-    (fun variables (_, scheme) ->
-       IntSet.union variables (scheme_free_variables scheme))
-    IntSet.empty environment
+    (fun vars (_, scheme) ->
+       IntSet.union vars (scheme_free_vars scheme))
+    IntSet.empty env
 
-let rec apply_substitution substitution = function
-  | HVar variable ->
-      (match List.assoc_opt variable substitution with
-       | None -> HVar variable
-       | Some replacement -> apply_substitution substitution replacement)
+let rec apply_subst subst = function
+  | HVar var ->
+      (match List.assoc_opt var subst with
+       | None -> HVar var
+       | Some replacement -> apply_subst subst replacement)
   | HCon constant -> HCon constant
-  | HArrow (domain, codomain) ->
+  | HArrow (dom, codom) ->
       HArrow
-        (apply_substitution substitution domain,
-         apply_substitution substitution codomain)
+        (apply_subst subst dom,
+         apply_subst subst codom)
 
-let apply_scheme substitution scheme =
+let apply_scheme subst scheme =
   let filtered =
     List.filter
-      (fun (variable, _) -> not (List.mem variable scheme.quantified))
-      substitution
+      (fun (var, _) -> not (List.mem var scheme.quantified))
+      subst
   in
-  { scheme with body = apply_substitution filtered scheme.body }
+  { scheme with body = apply_subst filtered scheme.body }
 
-let apply_environment substitution environment =
+let apply_env subst env =
   List.map
-    (fun (name, scheme) -> name, apply_scheme substitution scheme)
-    environment
+    (fun (name, scheme) -> name, apply_scheme subst scheme)
+    env
 
 (* [compose after before] denotes first applying [before], then [after]. *)
-let compose_substitution after before =
-  let before_domain = List.map fst before in
+let comp_subst after before =
+  let before_dom = List.map fst before in
   let rewritten =
     List.map
-      (fun (variable, ty) -> variable, apply_substitution after ty)
+      (fun (var, ty) -> var, apply_subst after ty)
       before
   in
   rewritten
   @ List.filter
-      (fun (variable, _) -> not (List.mem variable before_domain))
+      (fun (var, _) -> not (List.mem var before_dom))
       after
 
 let monomorphic body = { quantified = []; body }
 
-let lookup_environment name environment =
-  List.assoc_opt name environment
+let lookup_env name env =
+  List.assoc_opt name env
 
 type w_event =
   | WFresh of int
   | WInstantiate of int * scheme * hm_type
-  | WUnify of hm_type * hm_type * substitution option
+  | WUnify of hm_type * hm_type * subst option
   | WGeneralize of hm_type * scheme
-  | WCompose of substitution * substitution * substitution
+  | WCompose of subst * subst * subst
   | WFailure of string
 
 type w_state = {
-  mutable next_variable : int;
-  mutable reversed_trace : w_event list;
+  mutable next_var : int;
+  mutable rev_trace : w_event list;
 }
 
 exception W_error of string
 
 let record state event =
-  state.reversed_trace <- event :: state.reversed_trace
+  state.rev_trace <- event :: state.rev_trace
 
 let fresh_type state =
-  let variable = state.next_variable in
-  state.next_variable <- variable + 1;
-  record state (WFresh variable);
-  HVar variable
+  let var = state.next_var in
+  state.next_var <- var + 1;
+  record state (WFresh var);
+  HVar var
 
 let compose state after before =
-  let result = compose_substitution after before in
+  let result = comp_subst after before in
   record state (WCompose (after, before, result));
   result
 
-let bind_variable variable ty =
-  if hm_type_equal (HVar variable) ty then []
-  else if IntSet.mem variable (hm_free_variables ty) then
+let bind_var var ty =
+  if hm_type_eq (HVar var) ty then []
+  else if IntSet.mem var (hm_free_vars ty) then
     raise (W_error "occurs check")
   else
-    [variable, ty]
+    [var, ty]
 
-let rec unify_untraced left right =
+let rec unify left right =
   match left, right with
-  | HVar variable, ty -> bind_variable variable ty
-  | ty, HVar variable -> bind_variable variable ty
-  | HCon first, HCon second when first = second -> []
-  | HArrow (domain1, codomain1), HArrow (domain2, codomain2) ->
-      let first = unify_untraced domain1 domain2 in
-      let second =
-        unify_untraced
-          (apply_substitution first codomain1)
-          (apply_substitution first codomain2)
+  | HVar var, ty -> bind_var var ty
+  | ty, HVar var -> bind_var var ty
+  | HCon fst, HCon snd when fst = snd -> []
+  | HArrow (dom1, codom1), HArrow (dom2, codom2) ->
+      let fst = unify dom1 dom2 in
+      let snd =
+        unify
+          (apply_subst fst codom1)
+          (apply_subst fst codom2)
       in
-      compose_substitution second first
+      comp_subst snd fst
   | _ -> raise (W_error "constructor mismatch")
 
-let unify state left right =
+let unify_traced state left right =
   try
-    let substitution = unify_untraced left right in
-    record state (WUnify (left, right, Some substitution));
-    substitution
+    let subst = unify left right in
+    record state (WUnify (left, right, Some subst));
+    subst
   with W_error message ->
     record state (WUnify (left, right, None));
     raise (W_error message)
@@ -335,66 +338,66 @@ let unify state left right =
 let instantiate state name scheme =
   let replacements =
     List.map
-      (fun variable -> variable, fresh_type state)
+      (fun var -> var, fresh_type state)
       scheme.quantified
   in
-  let instance = apply_substitution replacements scheme.body in
+  let instance = apply_subst replacements scheme.body in
   record state (WInstantiate (name, scheme, instance));
   instance
 
-let generalize state environment ty =
+let generalize state env ty =
   let quantified =
     IntSet.elements
       (IntSet.diff
-         (hm_free_variables ty)
-         (environment_free_variables environment))
+         (hm_free_vars ty)
+         (env_free_vars env))
   in
   let scheme = { quantified; body = ty } in
   record state (WGeneralize (ty, scheme));
   scheme
 
-let rec infer_w state environment = function
+let rec infer_w state env = function
   | HName name ->
-      (match lookup_environment name environment with
+      (match lookup_env name env with
        | Some scheme -> [], instantiate state name scheme
        | None -> raise (W_error "unbound term variable"))
   | HConstant constant -> [], HCon constant
   | HLam (name, body) ->
-      let domain = fresh_type state in
-      let substitution, codomain =
-        infer_w state ((name, monomorphic domain) :: environment) body
+      let dom = fresh_type state in
+      let subst, codom =
+        infer_w state ((name, monomorphic dom) :: env) body
       in
-      substitution,
-      HArrow (apply_substitution substitution domain, codomain)
-  | HApp (function_, argument) ->
-      let first, function_type = infer_w state environment function_ in
-      let second, argument_type =
-        infer_w state (apply_environment first environment) argument
+      subst,
+      HArrow (apply_subst subst dom, codom)
+  | HApp (function_, arg) ->
+      let fst, function_type = infer_w state env function_ in
+      let snd, arg_type =
+        infer_w state (apply_env fst env) arg
       in
       let result_type = fresh_type state in
       let third =
-        unify state
-          (apply_substitution second function_type)
-          (HArrow (argument_type, result_type))
+        unify_traced state
+          (apply_subst snd function_type)
+          (HArrow (arg_type, result_type))
       in
-      let first_two = compose state second first in
-      compose state third first_two,
-      apply_substitution third result_type
+      let fst_two = compose state snd fst in
+      compose state third fst_two,
+      apply_subst third result_type
   | HLet (name, bound, body) ->
-      let first, bound_type = infer_w state environment bound in
-      let environment' = apply_environment first environment in
+      let fst, bound_type = infer_w state env bound in
+      let env' = apply_env fst env in
       let scheme =
-        generalize state environment'
-          (apply_substitution first bound_type)
+        generalize state env'
+          (apply_subst fst bound_type)
       in
-      let second, body_type =
-        infer_w state ((name, scheme) :: environment') body
+      let snd, body_type =
+        infer_w state ((name, scheme) :: env') body
       in
-      compose state second first, body_type
+      compose state snd fst, body_type
 
 type w_result =
   | WInferred of {
-      substitution : substitution;
+      subst : subst;
       inferred_type : hm_type;
       trace : w_event list;
     }
@@ -404,17 +407,17 @@ type w_result =
     }
 
 let run_w term =
-  let state = { next_variable = 0; reversed_trace = [] } in
+  let state = { next_var = 0; rev_trace = [] } in
   try
-    let substitution, inferred_type = infer_w state [] term in
+    let subst, inferred_type = infer_w state [] term in
     WInferred {
-      substitution;
-      inferred_type = apply_substitution substitution inferred_type;
-      trace = List.rev state.reversed_trace;
+      subst;
+      inferred_type = apply_subst subst inferred_type;
+      trace = List.rev state.rev_trace;
     }
   with W_error message ->
     record state (WFailure message);
-    WRejected { message; trace = List.rev state.reversed_trace }
+    WRejected { message; trace = List.rev state.rev_trace }
 
 (* Top-level generalisation is the type-only bridge used by the relational
    generator.  The verified project additionally retains the W derivation and
@@ -422,31 +425,31 @@ let run_w term =
    not duplicated here. *)
 let hm_principal_ftype constants ty =
   let rec first_occurrences seen = function
-    | HVar variable ->
-        if List.mem variable seen then seen else seen @ [variable]
+    | HVar var ->
+        if List.mem var seen then seen else seen @ [var]
     | HCon _ -> seen
-    | HArrow (domain, codomain) ->
-        first_occurrences (first_occurrences seen domain) codomain
+    | HArrow (dom, codom) ->
+        first_occurrences (first_occurrences seen dom) codom
   in
   let quantified = first_occurrences [] ty in
   let count = List.length quantified in
-  let positions = List.mapi (fun position variable -> variable, position) quantified in
+  let var_pos = List.mapi (fun pos var -> var, pos) quantified in
   let rec translate = function
-    | HVar variable ->
-        (match List.assoc_opt variable positions with
-         | Some position -> FVar (count - position - 1)
+    | HVar var ->
+        (match List.assoc_opt var var_pos with
+         | Some pos -> TVar (count - pos - 1)
          | None -> invalid_arg "hm_principal_ftype: unquantified variable")
     | HCon constant -> constants constant
-    | HArrow (domain, codomain) ->
-        FArrow (translate domain, translate codomain)
+    | HArrow (dom, codom) ->
+        TArrow (translate dom, translate codom)
   in
-  List.fold_right (fun _ body -> FForall body) quantified (translate ty)
+  List.fold_right (fun _ body -> TForall body) quantified (translate ty)
 
 (* ===== A maximally shared view of HM types ===== *)
 
 type dag_node =
-  | DVariable of int
-  | DConstant of int
+  | DVar of int
+  | DConst of int
   | DArrow of int * int
 
 type type_dag = {
@@ -456,52 +459,52 @@ type type_dag = {
 
 let dag_of_hm_type ty =
   let nodes = ref [] in
-  let rec find_index wanted index = function
+  let rec find_ix wanted ix = function
     | [] -> None
-    | node :: _ when node = wanted -> Some index
-    | _ :: rest -> find_index wanted (index + 1) rest
+    | node :: _ when node = wanted -> Some ix
+    | _ :: rest -> find_ix wanted (ix + 1) rest
   in
   let intern node =
-    match find_index node 0 !nodes with
-    | Some identifier -> identifier
+    match find_ix node 0 !nodes with
+    | Some ident -> ident
     | None ->
-        let identifier = List.length !nodes in
+        let ident = List.length !nodes in
         nodes := !nodes @ [node];
-        identifier
+        ident
   in
   let rec visit = function
-    | HVar variable -> intern (DVariable variable)
-    | HCon constant -> intern (DConstant constant)
-    | HArrow (domain, codomain) ->
-        let domain_id = visit domain in
-        let codomain_id = visit codomain in
-        intern (DArrow (domain_id, codomain_id))
+    | HVar var -> intern (DVar var)
+    | HCon constant -> intern (DConst constant)
+    | HArrow (dom, codom) ->
+        let dom_id = visit dom in
+        let codom_id = visit codom in
+        intern (DArrow (dom_id, codom_id))
   in
   let root = visit ty in
   { nodes = Array.of_list !nodes; root }
 
 let hm_type_of_dag dag =
   let memo = Array.make (Array.length dag.nodes) None in
-  let rec decode identifier =
-    match memo.(identifier) with
+  let rec decode ident =
+    match memo.(ident) with
     | Some ty -> ty
     | None ->
         let ty =
-          match dag.nodes.(identifier) with
-          | DVariable variable -> HVar variable
-          | DConstant constant -> HCon constant
-          | DArrow (domain, codomain) ->
-              HArrow (decode domain, decode codomain)
+          match dag.nodes.(ident) with
+          | DVar var -> HVar var
+          | DConst constant -> HCon constant
+          | DArrow (dom, codom) ->
+              HArrow (decode dom, decode codom)
         in
-        memo.(identifier) <- Some ty;
+        memo.(ident) <- Some ty;
         ty
   in
   decode dag.root
 
 let rec hm_tree_size = function
   | HVar _ | HCon _ -> 1
-  | HArrow (domain, codomain) ->
-      1 + hm_tree_size domain + hm_tree_size codomain
+  | HArrow (dom, codom) ->
+      1 + hm_tree_size dom + hm_tree_size codom
 
 let rec duplicated_arrow_family depth ty =
   if depth = 0 then ty
@@ -548,9 +551,9 @@ type generator_state = {
 }
 
 let fresh_name counter prefix =
-  let index = !counter in
-  counter := index + 1;
-  prefix ^ string_of_int index
+  let ix = !counter in
+  counter := ix + 1;
+  prefix ^ string_of_int ix
 
 let fresh_presented_type state =
   let counter = ref state.next_type_name in
@@ -570,11 +573,11 @@ let fresh_presented_relation state =
   state.next_relation_name <- !counter;
   name
 
-let relation_binding_at environment index =
-  match nth_opt index environment with
+let relation_binding_at env ix =
+  match nth_opt ix env with
   | Some binding -> binding
   | None ->
-      let suffix = string_of_int index in
+      let suffix = string_of_int ix in
       {
         left_type = "freeL" ^ suffix;
         right_type = "freeR" ^ suffix;
@@ -583,41 +586,41 @@ let relation_binding_at environment index =
 
 type projection = Left | Right
 
-let rec project_type state side environment = function
-  | FVar index ->
-      let binding = relation_binding_at environment index in
+let rec project_type state side env = function
+  | TVar ix ->
+      let binding = relation_binding_at env ix in
       PVar (match side with Left -> binding.left_type | Right -> binding.right_type)
-  | FArrow (domain, codomain) ->
+  | TArrow (dom, codom) ->
       PArrow
-        (project_type state side environment domain,
-         project_type state side environment codomain)
-  | FForall body ->
+        (project_type state side env dom,
+         project_type state side env codom)
+  | TForall body ->
       let name = fresh_presented_type state in
       let local =
         { left_type = name; right_type = name; relation_name = "_" }
       in
-      PForall (name, project_type state side (local :: environment) body)
+      PForall (name, project_type state side (local :: env) body)
 
-let rec relate state environment ty left right =
+let rec relate state env ty left right =
   match ty with
-  | FVar index ->
-      let binding = relation_binding_at environment index in
+  | TVar ix ->
+      let binding = relation_binding_at env ix in
       RRelated (binding.relation_name, left, right)
-  | FArrow (domain, codomain) ->
+  | TArrow (dom, codom) ->
       let left_name = fresh_presented_value state "x" in
       let right_name = fresh_presented_value state "y" in
-      let left_variable = VName left_name in
-      let right_variable = VName right_name in
+      let left_var = VName left_name in
+      let right_var = VName right_name in
       RForallValue
-        (left_name, project_type state Left environment domain,
+        (left_name, project_type state Left env dom,
          RForallValue
-           (right_name, project_type state Right environment domain,
+           (right_name, project_type state Right env dom,
             RImplies
-              (relate state environment domain left_variable right_variable,
-               relate state environment codomain
-                 (VApply (left, left_variable))
-                 (VApply (right, right_variable)))))
-  | FForall body ->
+              (relate state env dom left_var right_var,
+               relate state env codom
+                 (VApply (left, left_var))
+                 (VApply (right, right_var)))))
+  | TForall body ->
       let left_name = fresh_presented_type state in
       let right_name = fresh_presented_type state in
       let relation_name = fresh_presented_relation state in
@@ -630,7 +633,7 @@ let rec relate state environment ty left right =
            (right_name,
             RForallRelation
               (relation_name, left_type, right_type,
-               relate state (binding :: environment) body
+               relate state (binding :: env) body
                  (VTypeApply (left, left_type))
                  (VTypeApply (right, right_type)))))
 
@@ -644,24 +647,24 @@ let generate_relation ty =
 
 (* Church encodings used by the presentation pass. *)
 let church_bool =
-  FForall (FArrow (FVar 0, FArrow (FVar 0, FVar 0)))
+  TForall (TArrow (TVar 0, TArrow (TVar 0, TVar 0)))
 
 let church_list element =
   let element_under_binder = ftype_shift 1 0 element in
-  FForall
-    (FArrow
-       (FArrow
+  TForall
+    (TArrow
+       (TArrow
           (element_under_binder,
-           FArrow (FVar 0, FVar 0)),
-        FArrow (FVar 0, FVar 0)))
+           TArrow (TVar 0, TVar 0)),
+        TArrow (TVar 0, TVar 0)))
 
-let rec presented_type_contains variable = function
-  | PVar name -> name = variable
-  | PArrow (domain, codomain) ->
-      presented_type_contains variable domain
-      || presented_type_contains variable codomain
+let rec presented_type_contains var = function
+  | PVar name -> name = var
+  | PArrow (dom, codom) ->
+      presented_type_contains var dom
+      || presented_type_contains var codom
   | PForall (name, body) ->
-      name <> variable && presented_type_contains variable body
+      name <> var && presented_type_contains var body
 
 let bool_body binder = function
   | PArrow (PVar first, PArrow (PVar second, PVar third)) ->
@@ -685,26 +688,26 @@ let rec pp_presented_type = function
        | Some element -> "[" ^ pp_presented_type element ^ "]"
        | None -> "forall " ^ binder ^ ". " ^ pp_presented_type body)
   | PVar name -> name
-  | PArrow (domain, codomain) ->
-      let domain_text =
-        match domain with
-        | PArrow _ -> "(" ^ pp_presented_type domain ^ ")"
+  | PArrow (dom, codom) ->
+      let dom_text =
+        match dom with
+        | PArrow _ -> "(" ^ pp_presented_type dom ^ ")"
         | PForall (binder, body)
           when bool_body binder body || Option.is_some (list_body binder body) ->
-            pp_presented_type domain
-        | PForall _ -> "(" ^ pp_presented_type domain ^ ")"
-        | PVar _ -> pp_presented_type domain
+            pp_presented_type dom
+        | PForall _ -> "(" ^ pp_presented_type dom ^ ")"
+        | PVar _ -> pp_presented_type dom
       in
-      domain_text ^ " -> " ^ pp_presented_type codomain
+      dom_text ^ " -> " ^ pp_presented_type codom
 
 let rec pp_relational_value = function
   | VName name -> name
-  | VApply (function_, argument) ->
+  | VApply (function_, arg) ->
       "(" ^ pp_relational_value function_ ^ " "
-      ^ pp_relational_value argument ^ ")"
-  | VTypeApply (function_, argument) ->
+      ^ pp_relational_value arg ^ ")"
+  | VTypeApply (function_, arg) ->
       "(" ^ pp_relational_value function_ ^ " ["
-      ^ pp_presented_type argument ^ "])"
+      ^ pp_presented_type arg ^ "])"
 
 let rec pp_rel_formula = function
   | RTrue -> "True"
@@ -732,23 +735,23 @@ let rec pp_rel_formula = function
 type cache_source = State_cache | Local_cache
 
 type brec_event =
-  | BQuery of int * erased_term
-  | BHit of int * cache_source * erased_term
-  | BMiss of int * erased_term
-  | BUpdate of int * int * erased_term
+  | BQuery of int * eterm
+  | BHit of int * cache_source * eterm
+  | BMiss of int * eterm
+  | BUpdate of int * int * eterm
 
-let rec erased_term_equal left right =
+let rec eterm_eq left right =
   match left, right with
   | EVar i, EVar j -> i = j
-  | EAbs body1, EAbs body2 -> erased_term_equal body1 body2
+  | ELam body1, ELam body2 -> eterm_eq body1 body2
   | EApp (f1, a1), EApp (f2, a2) ->
-      erased_term_equal f1 f2 && erased_term_equal a1 a2
+      eterm_eq f1 f2 && eterm_eq a1 a2
   | _ -> false
 
 let assoc_term key entries =
   let rec search = function
     | [] -> None
-    | (candidate, value) :: _ when erased_term_equal key candidate ->
+    | (candidate, value) :: _ when eterm_eq key candidate ->
         Some value
     | _ :: rest -> search rest
   in
@@ -782,7 +785,7 @@ let memoized_brec ?(emit = fun _ -> ()) f g initial_state =
                       emit (BUpdate (depth + 1, candidate, key));
                       run (depth + 1)
                         (fun query ->
-                           if erased_term_equal query key then Some answer
+                           if eterm_eq query key then Some answer
                            else state query))
             in
             local_cache := (key, value) :: !local_cache;
@@ -793,74 +796,74 @@ let memoized_brec ?(emit = fun _ -> ()) f g initial_state =
 (* ===== Pretty printers ===== *)
 
 let rec pp_ftype_with names precedence = function
-  | FVar index ->
-      (match nth_opt index names with
+  | TVar ix ->
+      (match nth_opt ix names with
        | Some name -> name
-       | None -> "#" ^ string_of_int index)
-  | FArrow (domain, codomain) ->
+       | None -> "#" ^ string_of_int ix)
+  | TArrow (dom, codom) ->
       let text =
-        pp_ftype_with names 1 domain ^ " -> "
-        ^ pp_ftype_with names 0 codomain
+        pp_ftype_with names 1 dom ^ " -> "
+        ^ pp_ftype_with names 0 codom
       in
       if precedence > 0 then "(" ^ text ^ ")" else text
-  | FForall body ->
+  | TForall body ->
       let name = "X" ^ string_of_int (List.length names) in
       let text = "forall " ^ name ^ ". " ^ pp_ftype_with (name :: names) 0 body in
       if precedence > 0 then "(" ^ text ^ ")" else text
 
 let pp_ftype ty = pp_ftype_with [] 0 ty
 
-let rec pp_erased_term = function
-  | EVar index -> "#" ^ string_of_int index
-  | EAbs body -> "(lambda. " ^ pp_erased_term body ^ ")"
-  | EApp (function_, argument) ->
-      "(" ^ pp_erased_term function_ ^ " " ^ pp_erased_term argument ^ ")"
+let rec pp_eterm = function
+  | EVar ix -> "#" ^ string_of_int ix
+  | ELam body -> "(lambda. " ^ pp_eterm body ^ ")"
+  | EApp (function_, arg) ->
+      "(" ^ pp_eterm function_ ^ " " ^ pp_eterm arg ^ ")"
 
 let rec pp_hm_type_with precedence = function
-  | HVar variable -> "'" ^ string_of_int variable
+  | HVar var -> "'" ^ string_of_int var
   | HCon constant -> "c" ^ string_of_int constant
-  | HArrow (domain, codomain) ->
+  | HArrow (dom, codom) ->
       let text =
-        pp_hm_type_with 1 domain ^ " -> " ^ pp_hm_type_with 0 codomain
+        pp_hm_type_with 1 dom ^ " -> " ^ pp_hm_type_with 0 codom
       in
       if precedence > 0 then "(" ^ text ^ ")" else text
 
 let pp_hm_type ty = pp_hm_type_with 0 ty
 
-let pp_substitution substitution =
+let pp_subst subst =
   let entries =
     List.map
-      (fun (variable, ty) ->
-         "'" ^ string_of_int variable ^ " := " ^ pp_hm_type ty)
-      substitution
+      (fun (var, ty) ->
+         "'" ^ string_of_int var ^ " := " ^ pp_hm_type ty)
+      subst
   in
   "[" ^ String.concat "; " entries ^ "]"
 
 let pp_scheme scheme =
   match scheme.quantified with
   | [] -> pp_hm_type scheme.body
-  | variables ->
+  | vars ->
       "forall "
       ^ String.concat " "
-          (List.map (fun variable -> "'" ^ string_of_int variable) variables)
+          (List.map (fun var -> "'" ^ string_of_int var) vars)
       ^ ". " ^ pp_hm_type scheme.body
 
 let pp_w_event = function
-  | WFresh variable -> "fresh '" ^ string_of_int variable
+  | WFresh var -> "fresh '" ^ string_of_int var
   | WInstantiate (name, scheme, instance) ->
       "instantiate x" ^ string_of_int name ^ " : " ^ pp_scheme scheme
       ^ " => " ^ pp_hm_type instance
-  | WUnify (left, right, Some substitution) ->
+  | WUnify (left, right, Some subst) ->
       "unify " ^ pp_hm_type left ^ " ~ " ^ pp_hm_type right
-      ^ " => " ^ pp_substitution substitution
+      ^ " => " ^ pp_subst subst
   | WUnify (left, right, None) ->
       "unify " ^ pp_hm_type left ^ " ~ " ^ pp_hm_type right
       ^ " => failure"
   | WGeneralize (ty, scheme) ->
       "generalize " ^ pp_hm_type ty ^ " => " ^ pp_scheme scheme
   | WCompose (after, before, result) ->
-      "compose " ^ pp_substitution after ^ " after "
-      ^ pp_substitution before ^ " => " ^ pp_substitution result
+      "compose " ^ pp_subst after ^ " after "
+      ^ pp_subst before ^ " => " ^ pp_subst result
   | WFailure message -> "failure: " ^ message
 
 let pp_cache_source = function
@@ -869,32 +872,32 @@ let pp_cache_source = function
 
 let pp_brec_event = function
   | BQuery (depth, key) ->
-      Printf.sprintf "depth=%d query %s" depth (pp_erased_term key)
+      Printf.sprintf "depth=%d query %s" depth (pp_eterm key)
   | BHit (depth, source, key) ->
       Printf.sprintf "depth=%d hit(%s) %s"
-        depth (pp_cache_source source) (pp_erased_term key)
+        depth (pp_cache_source source) (pp_eterm key)
   | BMiss (depth, key) ->
-      Printf.sprintf "depth=%d miss %s" depth (pp_erased_term key)
+      Printf.sprintf "depth=%d miss %s" depth (pp_eterm key)
   | BUpdate (depth, candidate, key) ->
       Printf.sprintf "depth=%d update[%d] %s"
-        depth candidate (pp_erased_term key)
+        depth candidate (pp_eterm key)
 
 (* ===== Shared lecture examples and native smoke tests ===== *)
 
 let polymorphic_identity_type =
-  FForall (FArrow (FVar 0, FVar 0))
+  TForall (TArrow (TVar 0, TVar 0))
 
 let polymorphic_identity =
-  CTAbs (CAbs (FVar 0, CVar 0))
+  FTLam (FLam (TVar 0, FVar 0))
 
 let explicit_type_application =
-  CApp
-    (CTApp (polymorphic_identity, polymorphic_identity_type),
+  FApp
+    (FTApp (polymorphic_identity, polymorphic_identity_type),
      polymorphic_identity)
 
 let term4 =
-  CApp
-    (CAbs (polymorphic_identity_type, CVar 0),
+  FApp
+    (FLam (polymorphic_identity_type, FVar 0),
      polymorphic_identity)
 
 let w_let_identity =
@@ -907,16 +910,16 @@ let w_occurs_failure =
   HLam (0, HApp (HName 0, HName 0))
 
 let polymorphic_list_endomorphism =
-  FForall
-    (FArrow
-       (church_list (FVar 0),
-        church_list (FVar 0)))
+  TForall
+    (TArrow
+       (church_list (TVar 0),
+        church_list (TVar 0)))
 
 let negative_occurrence_example =
-  FForall
-    (FArrow
-       (FArrow (FVar 0, church_bool),
-        FArrow (FVar 0, church_bool)))
+  TForall
+    (TArrow
+       (TArrow (TVar 0, church_bool),
+        TArrow (TVar 0, church_bool)))
 
 let presented_closed_type ty =
   let state = {
@@ -964,7 +967,7 @@ let run_examples () =
 
   let duplicated = duplicated_arrow_family 4 (HVar 0) in
   let dag = dag_of_hm_type duplicated in
-  assert (hm_type_equal (hm_type_of_dag dag) duplicated);
+  assert (hm_type_eq (hm_type_of_dag dag) duplicated);
   assert (Array.length dag.nodes < hm_tree_size duplicated);
 
   let identity_formula = generate_relation polymorphic_identity_type in
@@ -987,8 +990,8 @@ let run_examples () =
   Printf.printf "\nAlgorithm W:\n";
   Printf.printf "  let id = fun x -> x in id id : %s\n" (pp_hm_type inferred_type);
   List.iteri
-    (fun index event ->
-       if index < 8 then Printf.printf "    %02d  %s\n" (index + 1) (pp_w_event event))
+    (fun ix event ->
+       if ix < 8 then Printf.printf "    %02d  %s\n" (ix + 1) (pp_w_event event))
     w_trace;
   if List.length w_trace > 8 then
     Printf.printf "    ... %d more events\n" (List.length w_trace - 8);

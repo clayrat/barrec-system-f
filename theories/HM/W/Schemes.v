@@ -5,14 +5,14 @@
 
 Set Implicit Arguments.
 
-From SystemF.HM.WInCoq Require Import SimpleTypes.
+From SystemF.HM.W Require Import SimpleTypes.
 Require Import Arith.Arith_base List Lia.
 Require Import Wellfounded.Lexicographic_Product.
 Require Import Relation_Operators.
 Require Import Coq.Setoids.Setoid.
-From SystemF.HM.WInCoq Require Import LibTactics.
+From SystemF.HM.W Require Import LibTactics.
 
-From SystemF.HM.WInCoq Require Import LibTactics.
+From SystemF.HM.W Require Import LibTactics.
 
 (** * Schemes *)
 

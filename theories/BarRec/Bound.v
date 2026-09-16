@@ -37,7 +37,7 @@ Fixpoint term_subst (n : nat) (t : term) (p : list term) : term :=
   | Var m =>
     if m <? n then Var m
     else nth (m - n) p (Var (m - length p))
-  | Abs t => Abs (term_subst (S n) t (map (term_lift 0) p))
+  | Lam t => Lam (term_subst (S n) t (map (term_lift 0) p))
   | App t u => App (term_subst n t p) (term_subst n u p)
  end.
 
@@ -53,7 +53,7 @@ Fixpoint term_subst (n : nat) (t : term) (p : list term) : term :=
    is a list of terms of the logic. *)
 Inductive logterm : Type :=
  | LVar : nat -> logterm
- | LAbs : logterm -> logterm
+ | LLam : logterm -> logterm
  | LApp : logterm -> logtermlist -> logterm
  | LMetavar : nat -> logterm
  | LMetasubst : logterm -> logtermlist -> logterm
@@ -64,7 +64,7 @@ with logtermlist : Type :=
 Fixpoint term_to_logterm (t : term) : logterm :=
  match t with
   | Var m => LVar m
-  | Abs t => LAbs (term_to_logterm t)
+  | Lam t => LLam (term_to_logterm t)
   | App t u => LApp (term_to_logterm t) (LLList [term_to_logterm u])
  end.
 (* This embeds lists of untyped terms
@@ -77,7 +77,7 @@ Fixpoint termlist_to_logtermlist (p : list term) : logtermlist :=
 Fixpoint logterm_liftt (n : nat) (t : logterm) : logterm :=
  match t with
   | LVar m => LVar m
-  | LAbs t => LAbs (logterm_liftt n t)
+  | LLam t => LLam (logterm_liftt n t)
   | LApp t p => LApp (logterm_liftt n t) (logtermlist_liftt n p)
   | LMetavar m => if m <? n then LMetavar m else LMetavar (S m)
   | LMetasubst t p => LMetasubst (logterm_liftt n t) (logtermlist_liftt n p)
@@ -93,7 +93,7 @@ with logtermlist_liftt (n : nat) (p : logtermlist) : logtermlist :=
 Fixpoint logterm_liftp (n : nat) (t : logterm) : logterm :=
  match t with
   | LVar m => LVar m
-  | LAbs t => LAbs (logterm_liftp n t)
+  | LLam t => LLam (logterm_liftp n t)
   | LApp t p => LApp (logterm_liftp n t) (logtermlist_liftp n p)
   | LMetavar m => LMetavar m
   | LMetasubst t p => LMetasubst (logterm_liftp n t) (logtermlist_liftp n p)
@@ -109,7 +109,7 @@ with logtermlist_liftp (n : nat) (p : logtermlist) : logtermlist :=
 Fixpoint logterm_substt (n : nat) (t : logterm) (u : logterm) : logterm :=
  match t with
   | LVar n => LVar n
-  | LAbs t => LAbs (logterm_substt n t u)
+  | LLam t => LLam (logterm_substt n t u)
   | LApp t p => LApp (logterm_substt n t u) (logtermlist_substt n p u)
   | LMetavar m =>
    match m ?= n with
@@ -130,7 +130,7 @@ with logtermlist_substt (n : nat) (p : logtermlist) (u : logterm) : logtermlist 
 Fixpoint logterm_substp (n : nat) (t : logterm) (p : logtermlist) : logterm :=
  match t with
   | LVar n => LVar n
-  | LAbs t => LAbs (logterm_substp n t p)
+  | LLam t => LLam (logterm_substp n t p)
   | LApp t q => LApp (logterm_substp n t p) (logtermlist_substp n q p)
   | LMetavar m => LMetavar m
   | LMetasubst t q => LMetasubst (logterm_substp n t p) (logtermlist_substp n q p)
@@ -150,7 +150,7 @@ with logtermlist_substp (n : nat) (q : logtermlist) (p : logtermlist) : logterml
 Fixpoint logterm_to_term (t : logterm) : term :=
  match t with
   | LVar n => Var n
-  | LAbs t => Abs (logterm_to_term t)
+  | LLam t => Lam (logterm_to_term t)
   | LApp t p =>
    match p with
     | LLVar m => Var 0
@@ -287,7 +287,7 @@ Definition redcand : form :=
   (FForallt (FForallt (FForallp
    (FImp
     (FIn (LApp (LMetasubst (LMetavar 1) (LLList [LMetavar 0])) (LLVar 0)) 0)
-    (FIn (LApp (LApp (LAbs (LMetavar 1)) (LLList [LMetavar 0])) (LLVar 0)) 0)
+    (FIn (LApp (LApp (LLam (LMetavar 1)) (LLList [LMetavar 0])) (LLVar 0)) 0)
    )
   ))).
 
@@ -738,7 +738,7 @@ Extract Constant brec => "
   let brec_id = Barrec_trace.fresh_brec_id () in
   let rec trace_term = function
    | Var n -> Barrec_trace.key_var n
-   | Abs body -> Barrec_trace.key_abs (trace_term body)
+   | Lam body -> Barrec_trace.key_lam (trace_term body)
    | App (function_, argument) ->
        Barrec_trace.key_app (trace_term function_) (trace_term argument) in
   let trace action depth t =
@@ -799,21 +799,21 @@ Definition normrc : form_to_type (form_subst2 0 redcand norm) :=
 (* "isrc tcontext T" is the realizer
    of RedCand(X_1) ⇒ ... ⇒ RedCand(X_n) ⇒ RedCand(T)
    where X_1...X_n is tcontext *)
-Program Fixpoint isrc (tcontext : list (form_to_type redcand)) (T : type) : form_to_type (form_subst2 0 redcand (rc T)) :=
+Program Fixpoint isrc (tctx : list (form_to_type redcand)) (T : type) : form_to_type (form_subst2 0 redcand (rc T)) :=
  match T return form_to_type (form_subst2 0 redcand (rc T)) with
-  | TVar m => rew [id] _ in nth m tcontext (exf redcand 0)
+  | TVar m => rew [id] _ in nth m tctx (exf redcand 0)
   | TArrow T1 T2 =>
-   let isrc1 := isrc tcontext T1 in
-   let isrc2 := isrc tcontext T2 in
+   let isrc1 := isrc tctx T1 in
+   let isrc2 := isrc tctx T2 in
    (fun p t x => rew [id] _ in fst (fst isrc2) (t::p),
     fun t x => snd (fst isrc2) (App t (Var 0))
       (rew [id] _ in x (Var 0) (rew [id] _ in fst (fst isrc1) [])),
     fun t u p x v y => rew [id] _ in snd isrc2 t u (v::p)
       (rew [id] _ in x v (rew [id] _ in y)))
   | TForall T =>
-   (fun p x => fst (fst (isrc (x::tcontext) T)) p,
-    fun t x => elim (FImp redcand (FForallt (FImp (rc T) norm))) norm (fun y => rew [id] _ in snd (fst (isrc (y::tcontext) T))) normrc t (rew [id] _ in elim (FImp redcand (form_substt 0 (rc T) (term_to_logterm t))) norm (rew [id] _ in x) normrc),
-    fun t u p y x => snd (isrc (x::tcontext) T) t u p (y x))
+   (fun p x => fst (fst (isrc (x::tctx) T)) p,
+    fun t x => elim (FImp redcand (FForallt (FImp (rc T) norm))) norm (fun y => rew [id] _ in snd (fst (isrc (y::tctx) T))) normrc t (rew [id] _ in elim (FImp redcand (form_substt 0 (rc T) (term_to_logterm t))) norm (rew [id] _ in x) normrc),
+    fun t u p y x => snd (isrc (x::tctx) T) t u p (y x))
  end.
 Next Obligation.
 rewrite form_to_type_substt.
@@ -870,24 +870,24 @@ Qed.
    H is a proof that t is well-typed
    in context context) is the realizer of
    RC_{(type_get context t)[U_1...U_n/0]}(t[u_1...u_n/0]) *)
-Program Fixpoint adeq_var (tcontext : list (form_to_type redcand)) (context : list (term * {T : type & form_to_type (rc T)})) (T : type) (t : fvar (map (@projT1 type (fun T => form_to_type (rc T))) (map snd context)) T) : form_to_type (rc T) :=
+Program Fixpoint adeq_var (tctx : list (form_to_type redcand)) (ctx : list (term * {T : type & form_to_type (rc T)})) (T : type) (t : dvar (map (@projT1 type (fun T => form_to_type (rc T))) (map snd ctx)) T) : form_to_type (rc T) :=
    match t with
-    | FVar0 T => match context with [] => match _ : False with end | (t, existT _ T x)::context => x end
-    | FVarS t => match context with [] => match _ : False with end | _::context => rew [id] _ in adeq_var tcontext context T t end
+    | DVar0 T => match ctx with [] => match _ : False with end | (t, existT _ T x)::ctx => x end
+    | DVarS t => match ctx with [] => match _ : False with end | _::ctx => rew [id] _ in adeq_var tctx ctx T t end
    end.
-Program Fixpoint adeq (tcontext : list (form_to_type redcand)) (context : list (term * {T : type & form_to_type (rc T)})) (T : type) (t : fterm (map (@projT1 type (fun T => form_to_type (rc T))) (map snd context)) T) : form_to_type (rc T) :=
+Program Fixpoint adeq (tctx : list (form_to_type redcand)) (ctx : list (term * {T : type & form_to_type (rc T)})) (T : type) (t : fderiv (map (@projT1 type (fun T => form_to_type (rc T))) (map snd ctx)) T) : form_to_type (rc T) :=
  match t with
-  | @FVar _ _ t => adeq_var tcontext context _ t
-  | @FAbs _ T U t =>
+  | @DVar _ _ t => adeq_var tctx ctx _ t
+  | @DLam _ T U t =>
    fun u y =>
-    let body := term_subst 1 (fterm_to_term t)
-      (map (fun a => term_lift 0 (fst a)) context) in
-    let context' := (u, existT _ T y)::context in
-    rew [id] _ in snd (isrc tcontext U) body u []
-      (rew [id] _ in adeq tcontext context' U t)
-  | @FApp _ T U t u => rew [id] _ in adeq tcontext context (TArrow T U) t (term_subst 0 (fterm_to_term u) (map (fun a => fst a) context)) (adeq tcontext context T u)
-  | @FTAbs _ T t => fun x => rew [id] _ in adeq (x::tcontext) (map (fun a => (fst a, existT _ (type_lift 0 (projT1 (snd a))) (rew [id] _ in projT2 (snd a)))) context) T t
-  | @FTApp _ T t U => rew [id] _ in elim (FImp redcand (form_substt 0 (rc T) (term_to_logterm (term_subst 0 (fterm_to_term t) (map (fun a => fst a) context))))) (rc U) (rew [id] _ in adeq tcontext context (TForall T) t) (isrc tcontext U)
+    let body := term_subst 1 (fderiv_to_term t)
+      (map (fun a => term_lift 0 (fst a)) ctx) in
+    let ctx' := (u, existT _ T y)::ctx in
+    rew [id] _ in snd (isrc tctx U) body u []
+      (rew [id] _ in adeq tctx ctx' U t)
+  | @DApp _ T U t u => rew [id] _ in adeq tctx ctx (TArrow T U) t (term_subst 0 (fderiv_to_term u) (map (fun a => fst a) ctx)) (adeq tctx ctx T u)
+  | @DTLam _ T t => fun x => rew [id] _ in adeq (x::tctx) (map (fun a => (fst a, existT _ (type_lift 0 (projT1 (snd a))) (rew [id] _ in projT2 (snd a)))) ctx) T t
+  | @DTApp _ T t U => rew [id] _ in elim (FImp redcand (form_substt 0 (rc T) (term_to_logterm (term_subst 0 (fderiv_to_term t) (map (fun a => fst a) ctx))))) (rc U) (rew [id] _ in adeq tctx ctx (TForall T) t) (isrc tctx U)
  end.
 Next Obligation.
 fold form_to_type.
@@ -944,8 +944,8 @@ Qed.
    context) computes a bound a bound
    on the number of reduction steps
    of t *)
-Program Definition bound (T : type) (t : fterm [] T) : nat :=
- snd (fst (isrc [] T)) (fterm_to_term t) (rew [id] _ in adeq [] [] T t) id.
+Program Definition bound (T : type) (t : fderiv [] T) : nat :=
+ snd (fst (isrc [] T)) (fderiv_to_term t) (rew [id] _ in adeq [] [] T t) id.
 Next Obligation.
 rewrite form_to_type_substt.
 reflexivity.

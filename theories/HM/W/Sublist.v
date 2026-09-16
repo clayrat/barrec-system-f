@@ -5,15 +5,15 @@
 
 Set Implicit Arguments.
 
-From SystemF.HM.WInCoq Require Import LibTactics.
-From SystemF.HM.WInCoq Require Import ListIds.
-From SystemF.HM.WInCoq Require Import Context.
-From SystemF.HM.WInCoq Require Import Schemes.
-From SystemF.HM.WInCoq Require Import SubstSchm.
-From SystemF.HM.WInCoq Require Import SimpleTypes.
-From SystemF.HM.WInCoq Require Import Subst.
-From SystemF.HM.WInCoq Require Import MyLtacs.
-From SystemF.HM.WInCoq Require Import Disjoints.
+From SystemF.HM.W Require Import LibTactics.
+From SystemF.HM.W Require Import ListIds.
+From SystemF.HM.W Require Import Context.
+From SystemF.HM.W Require Import Schemes.
+From SystemF.HM.W Require Import SubstSchm.
+From SystemF.HM.W Require Import SimpleTypes.
+From SystemF.HM.W Require Import Subst.
+From SystemF.HM.W Require Import MyLtacs.
+From SystemF.HM.W Require Import Disjoints.
 Require Import Arith.Arith_base.
 Require Import List.
 
@@ -207,7 +207,7 @@ Qed.
 
 Hint Resolve sublist_FV_type_scheme:core.
 
-Lemma sublist_FV_ctx : forall (G: ctx) (s: substitution) (i : id),
+Lemma sublist_FV_ctx : forall (G: hmctx) (s: substitution) (i : id),
     in_list_id i (FV_ctx G) = true ->
     (is_sublist_id (ids_ty (apply_subst s (var i))) (FV_ctx (apply_subst_ctx s G))).
 Proof.

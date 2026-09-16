@@ -5,7 +5,7 @@ let pp_nat = string_of_int
 
 let rec pp_term = function
   | Var n -> "#" ^ pp_nat n
-  | Abs t -> "(lambda. " ^ pp_term t ^ ")"
+  | Lam t -> "(lambda. " ^ pp_term t ^ ")"
   | App (f, x) -> "(" ^ pp_term f ^ " " ^ pp_term x ^ ")"
 
 let check_native_nat_contracts () =
@@ -203,7 +203,7 @@ let accept_w_elaboration () =
   (match erase_hm_closed hm_let_identity_self_application with
    | Some erased ->
        let expected =
-         App (Abs (App (Var 0, Var 0)), Abs (Var 0))
+         App (Lam (App (Var 0, Var 0)), Lam (Var 0))
        in
        if not (term_equal erased expected) then
          failwith "HM let erasure changed unexpectedly"
@@ -233,22 +233,22 @@ let accept_w_elaboration () =
        let elaboration = checked_elaboration.checked_church_elaboration in
        (match checked_elaboration.checked_church_certificate with
         | ExistT (ty, intrinsic) ->
-            if not (type_eq_dec ty elaboration.raw_church_systemf_type) then
-              failwith "reified RawChurch has an unexpected checked type";
-            let erased = fterm_to_term [] ty intrinsic in
+            if not (type_eq_dec ty elaboration.church_systemf_type) then
+              failwith "reified fterm has an unexpected checked type";
+            let erased = fderiv_to_term [] ty intrinsic in
             if not (term_equal erased
               (checked_church_erasure checked_elaboration))
             then failwith "retained checker certificate changed its erasure";
             if not (term_equal erased
-              (erase_raw elaboration.raw_church_term))
-            then failwith "checked RawChurch changed its erasure";
+              (fterm_to_term elaboration.church_term))
+            then failwith "checked fterm changed its erasure";
             if not (term_equal erased
-              (App (Abs (App (Var 0, Var 0)), Abs (Var 0))))
-            then failwith "W-to-RawChurch bridge changed HM erasure";
+              (App (Lam (App (Var 0, Var 0)), Lam (Var 0))))
+            then failwith "W-to-fterm bridge changed HM erasure";
             (match eval_cap 2 erased with
              | Some (steps, normal_form) ->
                  if steps <> 2
-                    || not (term_equal normal_form (Abs (Var 0)))
+                    || not (term_equal normal_form (Lam (Var 0)))
                  then failwith "main W-to-F term has an unexpected WH trace";
                  Printf.printf
                    "  checked erasure: %s\n  weak-head: %s step(s), %s\n"
@@ -256,15 +256,15 @@ let accept_w_elaboration () =
              | None ->
                  failwith "main W-to-F term exhausted its exact WH cap")
        )
-   | Err _ -> failwith "W-to-RawChurch reification failed");
+   | Err _ -> failwith "W-to-fterm reification failed");
   (match runWChurchChecked
       (fun _ -> type1) hm_dead_internal_type_variable with
    | Ok checked_elaboration ->
        let elaboration = checked_elaboration.checked_church_elaboration in
-       if not (type_eq_dec elaboration.raw_church_systemf_type type1) then
+       if not (type_eq_dec elaboration.church_systemf_type type1) then
          failwith "dead internal type variable changed the principal type";
        if not (term_equal (checked_church_erasure checked_elaboration)
-         (Abs (App (Abs (Var 1), Abs (Var 0)))))
+         (Lam (App (Lam (Var 1), Lam (Var 0)))))
        then failwith "defaulted Church elaboration changed HM erasure";
        print_endline
          "  dead internal type variable: defaulted and checker-accepted"
@@ -310,32 +310,32 @@ let rec pp_type ty =
       | TArrow (l, r) -> "(" ^ pp_type l ^ " -> " ^ pp_type r ^ ")"
       | TForall t -> "(forall. " ^ pp_type t ^ ")"
 
-let rec pp_raw_church = function
-  | RCVar index -> "#" ^ pp_nat index
-  | RCAbs (ty, body) ->
-      "(lambda:" ^ pp_type ty ^ ". " ^ pp_raw_church body ^ ")"
-  | RCApp (f, x) ->
-      "(" ^ pp_raw_church f ^ " " ^ pp_raw_church x ^ ")"
-  | RCTAbs body -> "(Lambda. " ^ pp_raw_church body ^ ")"
-  | RCTApp (f, ty) ->
-      "(" ^ pp_raw_church f ^ " [" ^ pp_type ty ^ "])"
+let rec pp_fterm = function
+  | FVar index -> "#" ^ pp_nat index
+  | FLam (ty, body) ->
+      "(lambda:" ^ pp_type ty ^ ". " ^ pp_fterm body ^ ")"
+  | FApp (f, x) ->
+      "(" ^ pp_fterm f ^ " " ^ pp_fterm x ^ ")"
+  | FTLam body -> "(Lambda. " ^ pp_fterm body ^ ")"
+  | FTApp (f, ty) ->
+      "(" ^ pp_fterm f ^ " [" ^ pp_type ty ^ "])"
 
-let rec raw_church_equal left right =
+let rec fterm_equal left right =
   match left, right with
-  | RCVar left_index, RCVar right_index ->
+  | FVar left_index, FVar right_index ->
       left_index = right_index
-  | RCAbs (left_type, left_body), RCAbs (right_type, right_body) ->
+  | FLam (left_type, left_body), FLam (right_type, right_body) ->
       type_eq_dec left_type right_type
-      && raw_church_equal left_body right_body
-  | RCApp (left_function, left_argument),
-    RCApp (right_function, right_argument) ->
-      raw_church_equal left_function right_function
-      && raw_church_equal left_argument right_argument
-  | RCTAbs left_body, RCTAbs right_body ->
-      raw_church_equal left_body right_body
-  | RCTApp (left_function, left_type),
-    RCTApp (right_function, right_type) ->
-      raw_church_equal left_function right_function
+      && fterm_equal left_body right_body
+  | FApp (left_function, left_argument),
+    FApp (right_function, right_argument) ->
+      fterm_equal left_function right_function
+      && fterm_equal left_argument right_argument
+  | FTLam left_body, FTLam right_body ->
+      fterm_equal left_body right_body
+  | FTApp (left_function, left_type),
+    FTApp (right_function, right_type) ->
+      fterm_equal left_function right_function
       && type_eq_dec left_type right_type
   | _ -> false
 
@@ -358,29 +358,29 @@ let parse_church_or_fail source =
 let check_church_frontend_contracts () =
   (match Church_parser.parse_church_program church_identity_source with
    | Church_parser.Church_parsed raw
-       when raw_church_equal raw boundary_raw_polymorphic_identity -> ()
+       when fterm_equal raw boundary_raw_polymorphic_identity -> ()
    | _ -> failwith "Church frontend changed the polymorphic identity");
   (match Church_parser.parse_church_program
       "Lambda X. fun x : X. x" with
    | Church_parser.Church_parsed raw
-       when raw_church_equal raw boundary_raw_polymorphic_identity -> ()
+       when fterm_equal raw boundary_raw_polymorphic_identity -> ()
    | _ -> failwith "Church frontend changed the compact lambda binder");
   (match Church_parser.parse_church_program church_type_application_source with
    | Church_parser.Church_parsed raw
-       when raw_church_equal raw boundary_raw_type_application -> ()
+       when fterm_equal raw boundary_raw_type_application -> ()
    | _ -> failwith "Church frontend changed explicit type application");
   (match Church_parser.parse_church_program
       "Lambda X. fun (f : X -> X -> X) -> fun (x : X) -> f x" with
    | Church_parser.Church_parsed
-       (RCTAbs
-         (RCAbs
+       (FTLam
+         (FLam
            (TArrow (TVar 0, TArrow (TVar 0, TVar 0)),
-            RCAbs (TVar 0, RCApp (RCVar 1, RCVar 0))))) -> ()
+            FLam (TVar 0, FApp (FVar 1, FVar 0))))) -> ()
    | _ -> failwith "Church frontend precedence or indices changed");
   (match Church_parser.parse_church_program
       "Lambda X. Lambda X. fun (x : X) -> x" with
    | Church_parser.Church_parsed
-       (RCTAbs (RCTAbs (RCAbs (TVar 0, RCVar 0)))) -> ()
+       (FTLam (FTLam (FLam (TVar 0, FVar 0)))) -> ()
    | _ -> failwith "Church frontend resolves shadowed type names incorrectly");
   (match Church_parser.parse_church_program "Lambda X. missing" with
    | Church_parser.Church_parse_error diagnostic
@@ -424,15 +424,15 @@ let rec pp_formula_type depth ty =
           "(forall A" ^ string_of_int depth ^ ". "
           ^ pp_formula_type (depth + 1) body ^ ")"
 
-let rec pp_value_expr type_depth value_depth = function
+let rec pp_value_expr ty_depth value_depth = function
   | RVBound n -> pp_bound "x" value_depth n
   | RVFree n -> "f" ^ pp_nat n
   | RVApp (f, x) ->
-      "(" ^ pp_value_expr type_depth value_depth f ^ " "
-      ^ pp_value_expr type_depth value_depth x ^ ")"
+      "(" ^ pp_value_expr ty_depth value_depth f ^ " "
+      ^ pp_value_expr ty_depth value_depth x ^ ")"
   | RVTypeApp (f, ty) ->
-      pp_value_expr type_depth value_depth f
-      ^ "[" ^ pp_formula_type type_depth ty ^ "]"
+      pp_value_expr ty_depth value_depth f
+      ^ "[" ^ pp_formula_type ty_depth ty ^ "]"
 
 let rec pp_relation_expr relation_depth = function
   | RRBound n -> pp_bound "R" relation_depth n
@@ -444,35 +444,35 @@ let rec pp_relation_expr relation_depth = function
       "(" ^ pp_relation_expr relation_depth constructor ^ " "
       ^ pp_relation_expr relation_depth argument ^ ")"
 
-let rec pp_rel_formula type_depth relation_depth value_depth = function
+let rec pp_rel_formula ty_depth relation_depth value_depth = function
   | RFTop -> "true"
   | RFRel (relation, lhs, rhs) ->
       pp_relation_expr relation_depth relation ^ " "
-      ^ pp_value_expr type_depth value_depth lhs ^ " "
-      ^ pp_value_expr type_depth value_depth rhs
+      ^ pp_value_expr ty_depth value_depth lhs ^ " "
+      ^ pp_value_expr ty_depth value_depth rhs
   | RFEqual (lhs, rhs) ->
-      pp_value_expr type_depth value_depth lhs ^ " = "
-      ^ pp_value_expr type_depth value_depth rhs
+      pp_value_expr ty_depth value_depth lhs ^ " = "
+      ^ pp_value_expr ty_depth value_depth rhs
   | RFAnd (lhs, rhs) ->
-      "(" ^ pp_rel_formula type_depth relation_depth value_depth lhs
+      "(" ^ pp_rel_formula ty_depth relation_depth value_depth lhs
       ^ " /\\ "
-      ^ pp_rel_formula type_depth relation_depth value_depth rhs ^ ")"
+      ^ pp_rel_formula ty_depth relation_depth value_depth rhs ^ ")"
   | RFImplies (premise, conclusion) ->
-      "(" ^ pp_rel_formula type_depth relation_depth value_depth premise
+      "(" ^ pp_rel_formula ty_depth relation_depth value_depth premise
       ^ " -> "
-      ^ pp_rel_formula type_depth relation_depth value_depth conclusion ^ ")"
+      ^ pp_rel_formula ty_depth relation_depth value_depth conclusion ^ ")"
   | RFForallValue (ty, body) ->
       "forall x" ^ string_of_int value_depth ^ " : "
-      ^ pp_formula_type type_depth ty ^ ". "
-      ^ pp_rel_formula type_depth relation_depth (value_depth + 1) body
+      ^ pp_formula_type ty_depth ty ^ ". "
+      ^ pp_rel_formula ty_depth relation_depth (value_depth + 1) body
   | RFForallType body ->
-      "forall A" ^ string_of_int type_depth ^ ". "
-      ^ pp_rel_formula (type_depth + 1) relation_depth value_depth body
+      "forall A" ^ string_of_int ty_depth ^ ". "
+      ^ pp_rel_formula (ty_depth + 1) relation_depth value_depth body
   | RFForallRelation (lhs_ty, rhs_ty, body) ->
       "forall R" ^ string_of_int relation_depth ^ " : "
-      ^ "(" ^ pp_formula_type type_depth lhs_ty ^ ") -> "
-      ^ "(" ^ pp_formula_type type_depth rhs_ty ^ ") -> Prop. "
-      ^ pp_rel_formula type_depth (relation_depth + 1) value_depth body
+      ^ "(" ^ pp_formula_type ty_depth lhs_ty ^ ") -> "
+      ^ "(" ^ pp_formula_type ty_depth rhs_ty ^ ") -> Prop. "
+      ^ pp_rel_formula ty_depth (relation_depth + 1) value_depth body
 
 let pp_generated_formula formula =
   pp_rel_formula 0 0 0 formula
@@ -499,8 +499,8 @@ let pp_type_error = function
 let print_check i raw =
   match checkClosed raw with
   | Ok (ExistT (ty, t)) ->
-      let erased = fterm_to_term [] ty t in
-      if not (term_equal erased (erase_raw raw)) then
+      let erased = fderiv_to_term [] ty t in
+      if not (term_equal erased (fterm_to_term raw)) then
         failwith "checker result does not erase to the input";
       Printf.printf
         "raw_term%d: %s\n  erasure %s\n" (i + 1) (pp_type ty) (pp_term erased)
@@ -519,40 +519,40 @@ let print_curry_church_boundary () =
     | None -> failwith "boundary annotated identity was rejected"
   in
   if not (term_equal
-      (erase_raw boundary_raw_polymorphic_identity)
+      (fterm_to_term boundary_raw_polymorphic_identity)
       boundary_curry_identity)
      || not (term_equal
-       (erase_raw boundary_raw_identity_at_identity_type)
+       (fterm_to_term boundary_raw_identity_at_identity_type)
        boundary_curry_identity)
   then failwith "Church identity choices have different Curry erasures";
   if type_eq_dec polymorphic_type annotated_identity_type then
     failwith "Curry/Church boundary lost the different checked types";
   if not (term_equal
-      (erase_raw boundary_raw_type_application)
-      (erase_raw boundary_raw_annotated_application))
+      (fterm_to_term boundary_raw_type_application)
+      (fterm_to_term boundary_raw_annotated_application))
   then failwith "explicit type application survived Curry erasure";
   (match boundary_hm_identity_church_view with
    | Some (ty, raw) ->
        if not (type_eq_dec ty boundary_identity_type)
-          || not (raw_church_equal raw boundary_raw_polymorphic_identity)
+          || not (fterm_equal raw boundary_raw_polymorphic_identity)
        then failwith "HM did not restore the rank-1 Church identity"
    | None -> failwith "HM rejected the Curry identity");
   print_endline "Curry/Church boundary:";
   Printf.printf "  Curry erasure: %s\n" (pp_term boundary_curry_identity);
   Printf.printf "  Church choice A: %s : %s\n"
-    (pp_raw_church boundary_raw_polymorphic_identity)
+    (pp_fterm boundary_raw_polymorphic_identity)
     (pp_type polymorphic_type);
   Printf.printf "  Church choice B: %s : %s\n"
-    (pp_raw_church boundary_raw_identity_at_identity_type)
+    (pp_fterm boundary_raw_identity_at_identity_type)
     (pp_type annotated_identity_type);
   print_endline "  same Curry term, different checked System F types";
   Printf.printf "  erased type application: %s\n    -> %s\n"
-    (pp_raw_church boundary_raw_type_application)
-    (pp_term (erase_raw boundary_raw_type_application));
+    (pp_fterm boundary_raw_type_application)
+    (pp_term (fterm_to_term boundary_raw_type_application));
   print_endline
     "  back across: explicit Church annotations, or HM principal rank-1 elaboration";
   Printf.printf "  HM fun x -> x restores: %s\n"
-    (pp_raw_church boundary_raw_polymorphic_identity)
+    (pp_fterm boundary_raw_polymorphic_identity)
 
 let print_church_frontend () =
   check_church_frontend_contracts ();
@@ -573,7 +573,7 @@ let print_church_frontend () =
   print_endline "Church surface frontend:";
   Printf.printf "  source: %s\n" church_identity_source;
   Printf.printf "  parsed/checkClosed: %s : %s\n"
-    (pp_raw_church identity) (pp_type identity_type);
+    (pp_fterm identity) (pp_type identity_type);
   Printf.printf "  explicit [A] application checks as: %s\n"
     (pp_type application_type);
   print_endline
@@ -587,12 +587,12 @@ let run_church_source source =
       exit 2
   | Church_parser.Church_parsed raw ->
       Printf.printf "source: %s\n" source;
-      Printf.printf "RawChurch: %s\n" (pp_raw_church raw);
-      Printf.printf "Curry erasure: %s\n" (pp_term (erase_raw raw));
+      Printf.printf "fterm: %s\n" (pp_fterm raw);
+      Printf.printf "Curry erasure: %s\n" (pp_term (fterm_to_term raw));
       begin match checkClosed raw with
       | Ok (ExistT (ty, intrinsic)) ->
-          let checked_erasure = fterm_to_term [] ty intrinsic in
-          if not (term_equal checked_erasure (erase_raw raw)) then
+          let checked_erasure = fderiv_to_term [] ty intrinsic in
+          if not (term_equal checked_erasure (fterm_to_term raw)) then
             failwith "parsed checker result changed its erasure";
           Printf.printf "checkClosed: accepted\ntype: %s\n" (pp_type ty)
       | Err error ->
@@ -720,12 +720,12 @@ let run_hm_source source =
             | Ok checked ->
                 let elaboration = checked.checked_church_elaboration in
                 if not (type_eq_dec
-                  elaboration.raw_church_systemf_type systemf_type)
+                  elaboration.church_systemf_type systemf_type)
                 then failwith
                   "interactive HM bridge changed the principal type";
                 let erased = checked_church_erasure checked in
-                Printf.printf "RawChurch: %s\n"
-                  (pp_raw_church elaboration.raw_church_term);
+                Printf.printf "fterm: %s\n"
+                  (pp_fterm elaboration.church_term);
                 Printf.printf "Curry erasure: %s\n" (pp_term erased);
                 begin match eval_cap 32 erased with
                 | Some (steps, normal_form) ->
@@ -740,7 +740,7 @@ let run_hm_source source =
                   "successful pure HM input failed checked Church elaboration"
           else
             print_endline
-              "RawChurch: skipped (source constants have no term interpretation)"
+              "fterm: skipped (source constants have no term interpretation)"
       end
 
 let accept_main_w_trace traced =
@@ -794,7 +794,7 @@ let run_full_demo () =
   print_endline "Church checking:";
   List.iteri print_check [raw_term1; raw_term2; raw_term3; raw_term4];
   (match check_core 0 []
-     (RCApp (RCAbs (type1, RCVar 0), RCAbs (type1, RCVar 0))) with
+     (FApp (FLam (type1, FVar 0), FLam (type1, FVar 0))) with
    | Err (TypeMismatch _) ->
        print_endline "  (lambda x:forall.x) (lambda x:forall.x): rejected, type mismatch"
    | _ -> failwith "checker accepted an ill-typed application");

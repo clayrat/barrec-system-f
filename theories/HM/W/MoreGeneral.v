@@ -8,23 +8,23 @@
 Set Implicit Arguments.
 
 Require Import Lia.
-From SystemF.HM.WInCoq Require Import Schemes.
-From SystemF.HM.WInCoq Require Import SubstSchm.
-From SystemF.HM.WInCoq Require Import Gen.
+From SystemF.HM.W Require Import Schemes.
+From SystemF.HM.W Require Import SubstSchm.
+From SystemF.HM.W Require Import Gen.
 Require Import List.
-From SystemF.HM.WInCoq Require Import Sublist.
-From SystemF.HM.WInCoq Require Import ListIds.
-From SystemF.HM.WInCoq Require Import Context.
-From SystemF.HM.WInCoq Require Import Typing.
-From SystemF.HM.WInCoq Require Import Disjoints.
-From SystemF.HM.WInCoq Require Import NewTypeVariable.
-From SystemF.HM.WInCoq Require Import SimpleTypes.
-From SystemF.HM.WInCoq Require Import Subst.
-From SystemF.HM.WInCoq Require Import MyLtacs.
-From SystemF.HM.WInCoq Require Import NthErrorTools.
-From SystemF.HM.WInCoq Require Import ProductList.
-From SystemF.HM.WInCoq Require Import DisjointTail.
-From SystemF.HM.WInCoq Require Import LibTactics.
+From SystemF.HM.W Require Import Sublist.
+From SystemF.HM.W Require Import ListIds.
+From SystemF.HM.W Require Import Context.
+From SystemF.HM.W Require Import Typing.
+From SystemF.HM.W Require Import Disjoints.
+From SystemF.HM.W Require Import NewTypeVariable.
+From SystemF.HM.W Require Import SimpleTypes.
+From SystemF.HM.W Require Import Subst.
+From SystemF.HM.W Require Import MyLtacs.
+From SystemF.HM.W Require Import NthErrorTools.
+From SystemF.HM.W Require Import ProductList.
+From SystemF.HM.W Require Import DisjointTail.
+From SystemF.HM.W Require Import LibTactics.
 
 Inductive more_general : schm -> schm -> Prop :=
 | more_general_intro : forall sigma1 sigma2 : schm,
@@ -172,15 +172,15 @@ Hint Resolve FV_more_general:core.
 
 (** ** More general contexts lemmas *)
 
-Inductive more_general_ctx : ctx -> ctx -> Prop :=
+Inductive more_general_ctx : hmctx -> hmctx -> Prop :=
 | more_general_ctx_nil : more_general_ctx nil nil
-| more_general_ctx_cons : forall (G1 G2 : ctx) (i : id) (sigma1 sigma2 : schm),
+| more_general_ctx_cons : forall (G1 G2 : hmctx) (i : id) (sigma1 sigma2 : schm),
     more_general_ctx G1 G2 -> more_general sigma1 sigma2 ->
     more_general_ctx ((i, sigma1) :: G1) ((i, sigma2) :: G2).
 
 Hint Constructors more_general_ctx:core.
 
-Lemma FV_more_general_ctx : forall G1 G2 : ctx,
+Lemma FV_more_general_ctx : forall G1 G2 : hmctx,
     more_general_ctx G1 G2 ->
     Sublist.is_sublist_id (FV_ctx G1) (FV_ctx G2).
 Proof.
@@ -200,7 +200,7 @@ Hint Resolve FV_more_general_ctx:core.
 
 (** This complex lemma is needed to prove [more_general_ctx_disjoint_prefix_apply_inst]. *)
 Lemma inst_subst_to_subst_aux :
-  forall (G : ctx) (tau1 tau2 : ty) (l L : list id)
+  forall (G : hmctx) (tau1 tau2 : ty) (l L : list id)
     (is_s : list ty) (phi : substitution),
     are_disjoints (FV_ctx G) l ->
     apply_inst_subst is_s (fst (gen_ty_aux tau1 G l)) = Some tau2 ->
@@ -272,7 +272,7 @@ Hint Rewrite inst_subst_to_subst_aux:RE.
 
 (** This huge lemma is needed to prove [more_general_gen_ty]. *)
 Lemma more_general_ctx_disjoint_prefix_apply_inst :
-  forall (G1 G2 : ctx) (tau1 tau2 : ty) (phi : substitution)
+  forall (G1 G2 : hmctx) (tau1 tau2 : ty) (phi : substitution)
     (l2 l1 L P : list id) (is_s : inst_subst),
     more_general_ctx G1 G2 -> are_disjoints (FV_ctx G2) l2 ->
     are_disjoints (FV_ctx G1) l1 ->
@@ -338,7 +338,7 @@ Qed.
 
 Hint Resolve more_general_ctx_disjoint_prefix_apply_inst:core.
 
-Lemma more_general_gen_ty : forall (G1 G2 : ctx) (t : ty),
+Lemma more_general_gen_ty : forall (G1 G2 : hmctx) (t : ty),
     more_general_ctx G1 G2 -> more_general (gen_ty t G1) (gen_ty t G2).
 Proof.
   intros.
@@ -355,7 +355,7 @@ Qed.
 
 Hint Resolve more_general_gen_ty:core.
 
-Lemma typing_in_a_more_general_ctx : forall (e : term) (G2 G1 : ctx) (t : ty),
+Lemma typing_in_a_more_general_ctx : forall (e : hmterm) (G2 G1 : hmctx) (t : ty),
     more_general_ctx G1 G2 -> has_type G2 e t -> has_type G1 e t.
 Proof.
   induction e.
@@ -398,7 +398,7 @@ Qed.
     
 Hint Resolve typing_in_a_more_general_ctx:core.
 
-Lemma more_general_ctx_refl : forall G : ctx, more_general_ctx G G.
+Lemma more_general_ctx_refl : forall G : hmctx, more_general_ctx G G.
 Proof.
   simple induction G; auto.
   intros; elim a; auto.
@@ -408,7 +408,7 @@ Hint Resolve more_general_ctx_refl:core.
 
 (** Auxiliary lemma for the [more_general_gen_ty_before_apply_subst] lemma *)
 Lemma more_general_gen_ty_before_apply_subst_aux :
-  forall (G : ctx) (tau1 tau2 : ty) (phi s : substitution) (l1 l2 L P : list id) (is_s : inst_subst),
+  forall (G : hmctx) (tau1 tau2 : ty) (phi s : substitution) (l1 l2 L P : list id) (is_s : inst_subst),
     are_disjoints (FV_ctx G) l1 ->
     are_disjoints (FV_ctx (apply_subst_ctx s G)) l2 ->
     apply_inst_subst is_s (fst (gen_ty_aux (apply_subst s tau1)
@@ -417,7 +417,7 @@ Lemma more_general_gen_ty_before_apply_subst_aux :
                      (snd (gen_ty_aux (apply_subst s tau1) (apply_subst_ctx s G) l2)) L ->
     product_list L is_s = Some phi ->
     is_disjoint_with_some_tail (FV_ctx G) (snd (gen_ty_aux tau1 G l1)) P ->
-    apply_inst_subst (map_apply_subst_over_list_ty (ty_from_id_list P) (compose_subst s phi))
+    apply_inst_subst (map_apply_subst_over_list_ty (ty_from_id_list P) (comp_subst s phi))
                      (apply_subst_schm s (fst (gen_ty_aux tau1 G l1))) = Some tau2.
 Proof.
   induction tau1.
@@ -483,7 +483,7 @@ Qed.
 
 Hint Resolve more_general_gen_ty_before_apply_subst_aux:core.
 
-Lemma more_general_gen_ty_before_apply_subst : forall (s : substitution) (G : ctx) (tau : ty),
+Lemma more_general_gen_ty_before_apply_subst : forall (s : substitution) (G : hmctx) (tau : ty),
  more_general (apply_subst_schm s (gen_ty tau G)) (gen_ty (apply_subst s tau) (apply_subst_ctx s G)).
 Proof.
   intros.
@@ -493,7 +493,7 @@ Proof.
   unfold gen_ty in *.
   destruct (product_list_exists (apply_subst s tau) (apply_subst_ctx s G) x); eauto.
   unfold is_schm_instance.
-  exists (map_apply_subst_over_list_ty (ty_from_id_list (snd (gen_ty_aux tau G nil))) (compose_subst s x0)).
+  exists (map_apply_subst_over_list_ty (ty_from_id_list (snd (gen_ty_aux tau G nil))) (comp_subst s x0)).
   eauto.
 Qed.
 

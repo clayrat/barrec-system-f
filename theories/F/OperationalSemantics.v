@@ -26,8 +26,8 @@ Fixpoint term_subst1
       | Eq => argument
       | Gt => Var (pred m)
       end
-  | Abs body' =>
-      Abs (term_subst1 (S n) body' (term_lift 0 argument))
+  | Lam body' =>
+      Lam (term_subst1 (S n) body' (term_lift 0 argument))
   | App function argument' =>
       App (term_subst1 n function argument)
           (term_subst1 n argument' argument)
@@ -36,7 +36,7 @@ Fixpoint term_subst1
 (** Executable weak-head reduction. *)
 Fixpoint wh_step (t : term) : option term :=
   match t with
-  | App (Abs body) argument => Some (term_subst1 0 body argument)
+  | App (Lam body) argument => Some (term_subst1 0 body argument)
   | App function argument =>
       match wh_step function with
       | Some function' => Some (App function' argument)
@@ -81,7 +81,7 @@ Fixpoint eval_cap (fuel : nat) (t : term) : option (nat * term) :=
 (** Relational specification of [wh_step]. *)
 Inductive wh_reduces : term -> term -> Prop :=
 | WhBeta : forall body argument,
-    wh_reduces (App (Abs body) argument)
+    wh_reduces (App (Lam body) argument)
                (term_subst1 0 body argument)
 | WhApp : forall function function' argument,
     wh_reduces function function' ->

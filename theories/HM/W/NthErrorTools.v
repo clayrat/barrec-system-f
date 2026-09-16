@@ -5,10 +5,10 @@ Require Import Wellfounded.Lexicographic_Product.
 Require Import Relation_Operators.
 Require Import Coq.Setoids.Setoid.
 Require Import Program.
-From SystemF.HM.WInCoq Require Import SimpleTypes.
-From SystemF.HM.WInCoq Require Import Subst.
-From SystemF.HM.WInCoq Require Import LibTactics.
-From SystemF.HM.WInCoq Require Import MyLtacs.
+From SystemF.HM.W Require Import SimpleTypes.
+From SystemF.HM.W Require Import Subst.
+From SystemF.HM.W Require Import LibTactics.
+From SystemF.HM.W Require Import MyLtacs.
 
 
 Lemma nth_error_nil : forall i, nth_error (nil : list ty) i = None.

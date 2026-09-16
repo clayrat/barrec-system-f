@@ -15,7 +15,7 @@ Import ListNotations.
 
 From SystemF.F Require Import Syntax.
 From SystemF.HM Require Import ElabScope.
-From SystemF.HM.WInCoq Require Import SimpleTypes Typing.
+From SystemF.HM.W Require Import SimpleTypes Typing.
 
 (** Find the nearest binder with the requested source name. *)
 Fixpoint lookup_binder
@@ -32,7 +32,7 @@ Fixpoint lookup_binder
     restriction.  Constants contain no term variables and are therefore
     scoped, even though [constant_free] excludes them from elaboration. *)
 Fixpoint hm_names_scoped
-    (binders : list id) (expression : Typing.term) : Prop :=
+    (binders : list id) (expression : Typing.hmterm) : Prop :=
   match expression with
   | var_t variable => In variable binders
   | app_t function argument =>
@@ -55,7 +55,7 @@ Definition option_map2 {A B C : Type}
   end.
 
 Fixpoint erase_hm
-    (binders : list id) (expression : Typing.term)
+    (binders : list id) (expression : Typing.hmterm)
     : option Syntax.term :=
   match expression with
   | var_t variable =>
@@ -65,15 +65,15 @@ Fixpoint erase_hm
         (erase_hm binders function)
         (erase_hm binders argument)
   | let_t variable bound body =>
-      option_map2 (fun bound' body' => App (Abs body') bound')
+      option_map2 (fun bound' body' => App (Lam body') bound')
         (erase_hm binders bound)
         (erase_hm (variable :: binders) body)
   | lam_t variable body =>
-      option_map Abs (erase_hm (variable :: binders) body)
+      option_map Lam (erase_hm (variable :: binders) body)
   | const_t _ => None
   end.
 
-Definition erase_hm_closed (expression : Typing.term) : option Syntax.term :=
+Definition erase_hm_closed (expression : Typing.hmterm) : option Syntax.term :=
   erase_hm [] expression.
 
 (** ** Exact domain of the partial erasure *)

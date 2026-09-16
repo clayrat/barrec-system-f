@@ -10,11 +10,11 @@ The file keeps the executable ideas needed to read the lecture end to end:
 
 | Native section | Rocq/generated counterpart |
 | --- | --- |
-| explicit Church checker | `F.Checker.checkClosed` |
+| explicit Church checker | `F.Check.checkClosed` |
 | weak-head reducer | `F.OperationalSemantics.eval_cap` |
-| Algorithm W and its trace | `HM.W.runW_exec`, `HM.Trace.runWTrace` |
+| Algorithm W and its trace | `HM.WExec.runW_exec`, `HM.WTrace.runWTrace` |
 | shared HM type DAG | `HM.TypeDAG` |
-| relational formula generator | `FreeTheorems.Generator.relgen` |
+| relational formula generator | `FreeTheorems.Generate.relgen` |
 | memoising bar-recursion boundary | custom extraction of `BarRec.Bound.brec` |
 
 The native relational AST uses generated names instead of de Bruijn indices;

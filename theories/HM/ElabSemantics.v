@@ -8,10 +8,10 @@
 From Stdlib Require Import List Lia PeanoNat.
 Import ListNotations.
 
-From SystemF.F Require Import Syntax Scope TypeSubstitution RawTyping.
+From SystemF.F Require Import Syntax Scope TypeSubstitution Typing.
 From SystemF.HM Require Import Erasure WElab.
-From SystemF.HM.WInCoq Require Import Gen Schemes SimpleTypes Subst SubstSchm.
-From SystemF.HM.WInCoq Require Import Context Disjoints ListIds.
+From SystemF.HM.W Require Import Gen Schemes SimpleTypes Subst SubstSchm.
+From SystemF.HM.W Require Import Context Disjoints ListIds.
 
 Definition ConstantInterpretation : Type := id -> type.
 
@@ -143,7 +143,7 @@ Qed.
 
 Lemma valuation_after_compose : forall
     constants first second valuation variable,
-  valuation_after_substitution constants (compose_subst first second)
+  valuation_after_substitution constants (comp_subst first second)
     valuation variable =
   valuation_after_substitution constants first
     (valuation_after_substitution constants second valuation) variable.
@@ -561,72 +561,72 @@ Proof.
   - exact Hdisjoint.
 Qed.
 
-Fixpoint denote_context
+Fixpoint denote_ctx
     (constants : ConstantInterpretation)
     (valuation : TypeValuation)
-    (environment : ctx) : list type :=
+    (environment : hmctx) : list type :=
   match environment with
   | [] => []
   | (_, sigma) :: environment' =>
       denote_scheme constants valuation sigma ::
-      denote_context constants valuation environment'
+      denote_ctx constants valuation environment'
   end.
 
-Lemma denote_context_names : forall constants valuation environment,
-  length (denote_context constants valuation environment) =
+Lemma denote_ctx_names : forall constants valuation environment,
+  length (denote_ctx constants valuation environment) =
   length environment.
 Proof.
   intros constants valuation environment.
   induction environment as [| [variable sigma] environment IH].
   - reflexivity.
-  - cbn [denote_context].
+  - cbn [denote_ctx].
     cbn [length].
     now f_equal.
 Qed.
 
-Lemma denote_context_scoped : forall
+Lemma denote_ctx_scoped : forall
     constants valuation environment depth,
   constants_closed constants ->
   valuation_scoped depth valuation ->
-  Forall (closed depth) (denote_context constants valuation environment).
+  Forall (closed depth) (denote_ctx constants valuation environment).
 Proof.
   intros constants valuation environment.
   induction environment as [| [variable sigma] environment IH];
     intros depth Hconstants Hvaluation.
   - constructor.
-  - cbn [denote_context].
+  - cbn [denote_ctx].
     constructor.
     + now apply denote_scheme_scoped.
     + now apply IH.
 Qed.
 
-Lemma denote_context_valuation_ext : forall
+Lemma denote_ctx_valuation_ext : forall
     constants valuation valuation' environment,
   (forall variable, valuation variable = valuation' variable) ->
-  denote_context constants valuation environment =
-  denote_context constants valuation' environment.
+  denote_ctx constants valuation environment =
+  denote_ctx constants valuation' environment.
 Proof.
   intros constants valuation valuation' environment Hequal.
   induction environment as [| [variable sigma] environment IH].
   - reflexivity.
-  - cbn [denote_context].
+  - cbn [denote_ctx].
     now rewrite (denote_scheme_valuation_ext
       constants valuation valuation' sigma Hequal), IH.
 Qed.
 
-Lemma denote_context_after_substitution : forall
+Lemma denote_ctx_after_substitution : forall
     constants substitution valuation environment,
   constants_closed constants ->
-  denote_context constants
+  denote_ctx constants
     (valuation_after_substitution constants substitution valuation)
     environment =
-  denote_context constants valuation
+  denote_ctx constants valuation
     (apply_subst_ctx substitution environment).
 Proof.
   intros constants substitution valuation environment Hconstants.
   induction environment as [| [variable sigma] environment IH].
   - reflexivity.
-  - cbn [denote_context apply_subst_ctx].
+  - cbn [denote_ctx apply_subst_ctx].
     rewrite denote_scheme_after_substitution by exact Hconstants.
     now rewrite IH.
 Qed.
@@ -642,14 +642,14 @@ Proof.
   - now apply in_list_id_append2.
 Qed.
 
-Lemma denote_context_generalized : forall
+Lemma denote_ctx_generalized : forall
     constants valuation environment generalized,
   constants_closed constants ->
   are_disjoints (FV_ctx environment) generalized ->
-  denote_context constants
+  denote_ctx constants
     (generalized_valuation generalized valuation) environment =
-  lift_type_context_by (length generalized)
-    (denote_context constants valuation environment).
+  lift_type_ctx_by (length generalized)
+    (denote_ctx constants valuation environment).
 Proof.
   intros constants valuation environment.
   induction environment as [| [variable sigma] environment IH];
@@ -661,7 +661,7 @@ Proof.
     destruct (are_disjoints_append_left
       (FV_schm sigma) (FV_ctx environment) generalized Hdisjoint)
       as [Hsigma Henvironment].
-    cbn [denote_context lift_type_context_by map].
+    cbn [denote_ctx lift_type_ctx_by map].
     rewrite (denote_scheme_generalized
       constants valuation sigma generalized Hconstants Hsigma).
     now rewrite (IH generalized Hconstants Henvironment).
@@ -796,12 +796,12 @@ Proof.
   exact Hlength.
 Qed.
 
-Lemma lookup_binder_denote_context : forall
+Lemma lookup_binder_denote_ctx : forall
     constants valuation environment variable sigma,
   in_ctx variable environment = Some sigma ->
   exists index,
     lookup_binder variable (map fst environment) = Some index /\
-    nth_error (denote_context constants valuation environment) index =
+    nth_error (denote_ctx constants valuation environment) index =
       Some (denote_scheme constants valuation sigma).
 Proof.
   intros constants valuation environment.
@@ -811,23 +811,23 @@ Proof.
   - destruct (eq_id_dec name variable) as [Hequal | Hdifferent].
     + inversion Hlookup; subst annotation variable.
       exists 0.
-      cbn [map lookup_binder denote_context nth_error fst].
+      cbn [map lookup_binder denote_ctx nth_error fst].
       destruct (eq_id_dec name name); [now split | contradiction].
     + destruct (IH variable sigma Hlookup)
         as [index [Hbinder Htype]].
       exists (S index).
-      cbn [map lookup_binder denote_context nth_error fst].
+      cbn [map lookup_binder denote_ctx nth_error fst].
       destruct (eq_id_dec name variable); [contradiction |].
       rewrite Hbinder.
       now split.
 Qed.
 
-Lemma lookup_binder_denote_context_sig : forall
+Lemma lookup_binder_denote_ctx_sig : forall
     constants valuation environment variable sigma,
   in_ctx variable environment = Some sigma ->
   { index : nat |
     lookup_binder variable (map fst environment) = Some index /\
-    nth_error (denote_context constants valuation environment) index =
+    nth_error (denote_ctx constants valuation environment) index =
       Some (denote_scheme constants valuation sigma) }.
 Proof.
   intros constants valuation environment.
@@ -837,12 +837,12 @@ Proof.
   - destruct (eq_id_dec name variable) as [Hequal | Hdifferent].
     + inversion Hlookup; subst annotation variable.
       exists 0.
-      cbn [map lookup_binder denote_context nth_error fst].
+      cbn [map lookup_binder denote_ctx nth_error fst].
       destruct (eq_id_dec name name); [now split | contradiction].
     + destruct (IH variable sigma Hlookup)
         as [index [Hbinder Htype]].
       exists (S index).
-      cbn [map lookup_binder denote_context nth_error fst].
+      cbn [map lookup_binder denote_ctx nth_error fst].
       destruct (eq_id_dec name variable); [contradiction |].
       rewrite Hbinder.
       now split.
@@ -869,18 +869,18 @@ Proof.
   - cbn [denote_instantiation map]. now rewrite IH.
 Qed.
 
-Lemma denote_context_after_compose : forall
+Lemma denote_ctx_after_compose : forall
     constants first second valuation environment,
-  denote_context constants
-    (valuation_after_substitution constants (compose_subst first second)
+  denote_ctx constants
+    (valuation_after_substitution constants (comp_subst first second)
       valuation) environment =
-  denote_context constants
+  denote_ctx constants
     (valuation_after_substitution constants first
       (valuation_after_substitution constants second valuation))
     environment.
 Proof.
   intros constants first second valuation environment.
-  apply denote_context_valuation_ext.
+  apply denote_ctx_valuation_ext.
   intro variable.
   apply valuation_after_compose.
 Qed.

@@ -18,6 +18,7 @@ Import ListNotations.
 From SystemF.F Require Import Syntax Check OperationalSemantics.
 From SystemF.BarRec Require Import Bound.
 From SystemF.HM Require Import Erasure.
+From SystemF.HM.W Require Import Typing.
 From SystemF Require Import HMElab.
 
 Inductive NormalizationBoundSource : Type :=
@@ -26,7 +27,7 @@ Inductive NormalizationBoundSource : Type :=
 
 Record NormalizationResult : Type := {
   normalization_type : type;
-  normalization_intrinsic : fterm [] normalization_type;
+  normalization_intrinsic : fderiv [] normalization_type;
   normalization_bound_source : NormalizationBoundSource;
   normalization_bound : nat;
   normalization_result : term
@@ -34,11 +35,11 @@ Record NormalizationResult : Type := {
 
 Definition normalization_erasure
     (normalization : NormalizationResult) : term :=
-  fterm_to_term (normalization_intrinsic normalization).
+  fderiv_to_term (normalization_intrinsic normalization).
 
 Definition normalize_intrinsic {T : type}
-    (intrinsic : fterm [] T) : NormalizationResult :=
-  let erased := fterm_to_term intrinsic in
+    (intrinsic : fderiv [] T) : NormalizationResult :=
+  let erased := fderiv_to_term intrinsic in
   let proposed_bound := bound T intrinsic in
   {| normalization_type := T;
      normalization_intrinsic := intrinsic;
@@ -46,27 +47,27 @@ Definition normalize_intrinsic {T : type}
      normalization_bound := proposed_bound;
      normalization_result := run_fuel proposed_bound erased |}.
 
-Lemma normalize_intrinsic_type : forall T (intrinsic : fterm [] T),
+Lemma normalize_intrinsic_type : forall T (intrinsic : fderiv [] T),
   normalization_type (normalize_intrinsic intrinsic) = T.
 Proof. reflexivity. Qed.
 
-Lemma normalize_intrinsic_erasure : forall T (intrinsic : fterm [] T),
+Lemma normalize_intrinsic_erasure : forall T (intrinsic : fderiv [] T),
   normalization_erasure (normalize_intrinsic intrinsic) =
-  fterm_to_term intrinsic.
+  fderiv_to_term intrinsic.
 Proof. reflexivity. Qed.
 
-Lemma normalize_intrinsic_bound : forall T (intrinsic : fterm [] T),
+Lemma normalize_intrinsic_bound : forall T (intrinsic : fderiv [] T),
   normalization_bound (normalize_intrinsic intrinsic) = bound T intrinsic.
 Proof. reflexivity. Qed.
 
-Lemma normalize_intrinsic_bound_source : forall T (intrinsic : fterm [] T),
+Lemma normalize_intrinsic_bound_source : forall T (intrinsic : fderiv [] T),
   normalization_bound_source (normalize_intrinsic intrinsic) =
   bar_recursive_bound.
 Proof. reflexivity. Qed.
 
-Lemma normalize_intrinsic_result : forall T (intrinsic : fterm [] T),
+Lemma normalize_intrinsic_result : forall T (intrinsic : fderiv [] T),
   normalization_result (normalize_intrinsic intrinsic) =
-  run_fuel (bound T intrinsic) (fterm_to_term intrinsic).
+  run_fuel (bound T intrinsic) (fderiv_to_term intrinsic).
 Proof. reflexivity. Qed.
 
 (** Try a small exact evaluation before invoking BBC.  Success gives the
@@ -74,8 +75,8 @@ Proof. reflexivity. Qed.
     that [cap] was insufficient, so the total bar-recursive path remains the
     fallback. *)
 Definition normalize_intrinsic_with_cap {T : type}
-    (cap : nat) (intrinsic : fterm [] T) : NormalizationResult :=
-  let erased := fterm_to_term intrinsic in
+    (cap : nat) (intrinsic : fderiv [] T) : NormalizationResult :=
+  let erased := fderiv_to_term intrinsic in
   match eval_cap cap erased with
   | Some (steps, normal_form) =>
       {| normalization_type := T;
@@ -87,18 +88,18 @@ Definition normalize_intrinsic_with_cap {T : type}
   end.
 
 Lemma normalize_intrinsic_with_cap_erasure : forall
-    cap T (intrinsic : fterm [] T),
+    cap T (intrinsic : fderiv [] T),
   normalization_erasure (normalize_intrinsic_with_cap cap intrinsic) =
-  fterm_to_term intrinsic.
+  fderiv_to_term intrinsic.
 Proof.
   intros cap T intrinsic.
   unfold normalize_intrinsic_with_cap.
-  destruct (eval_cap cap (fterm_to_term intrinsic))
+  destruct (eval_cap cap (fderiv_to_term intrinsic))
     as [[steps normal_form] |]; reflexivity.
 Qed.
 
 Lemma normalize_intrinsic_with_cap_result : forall
-    cap T (intrinsic : fterm [] T),
+    cap T (intrinsic : fderiv [] T),
   normalization_result (normalize_intrinsic_with_cap cap intrinsic) =
   run_fuel
     (normalization_bound (normalize_intrinsic_with_cap cap intrinsic))
@@ -106,7 +107,7 @@ Lemma normalize_intrinsic_with_cap_result : forall
 Proof.
   intros cap T intrinsic.
   unfold normalize_intrinsic_with_cap.
-  destruct (eval_cap cap (fterm_to_term intrinsic))
+  destruct (eval_cap cap (fderiv_to_term intrinsic))
     as [[steps normal_form] |] eqn:Heval; simpl.
   - symmetry.
     now apply eval_cap_run_fuel with (fuel := cap).
@@ -114,8 +115,8 @@ Proof.
 Qed.
 
 Lemma normalize_intrinsic_with_cap_exact : forall
-    cap T (intrinsic : fterm [] T) steps normal_form,
-  eval_cap cap (fterm_to_term intrinsic) = Some (steps, normal_form) ->
+    cap T (intrinsic : fderiv [] T) steps normal_form,
+  eval_cap cap (fderiv_to_term intrinsic) = Some (steps, normal_form) ->
   normalization_bound_source (normalize_intrinsic_with_cap cap intrinsic) =
     exact_evaluation_bound /\
   normalization_bound (normalize_intrinsic_with_cap cap intrinsic) = steps /\
@@ -127,13 +128,13 @@ Proof.
   now rewrite Heval.
 Qed.
 
-Definition normalize_checked {raw : RawChurch}
+Definition normalize_checked {raw : fterm}
     (checked : Checked 0 [] raw) : NormalizationResult :=
   match checked with
   | existT _ _ (exist _ intrinsic _) => normalize_intrinsic intrinsic
   end.
 
-Definition normalize_checked_with_cap {raw : RawChurch}
+Definition normalize_checked_with_cap {raw : fterm}
     (cap : nat) (checked : Checked 0 [] raw) : NormalizationResult :=
   match checked with
   | existT _ _ (exist _ intrinsic _) =>
@@ -162,14 +163,14 @@ Proof.
 Qed.
 
 Definition normalizeClosed
-    (raw : RawChurch) : Result TypeError NormalizationResult :=
+    (raw : fterm) : Result TypeError NormalizationResult :=
   match checkClosed raw with
   | Ok checked => Ok (normalize_checked checked)
   | Err error => Err error
   end.
 
 Definition normalizeClosedWithCap
-    (cap : nat) (raw : RawChurch) : Result TypeError NormalizationResult :=
+    (cap : nat) (raw : fterm) : Result TypeError NormalizationResult :=
   match checkClosed raw with
   | Ok checked => Ok (normalize_checked_with_cap cap checked)
   | Err error => Err error
@@ -216,7 +217,7 @@ Definition normalize_checked_church_with_cap
 
 Definition runWBarNormalization
     (constants : ConstantInterpretation)
-    (expression : HM.WInCoq.Typing.term)
+    (expression : hmterm)
     : Result WChurchError NormalizationResult :=
   match runWChurchChecked constants expression with
   | Ok checked => Ok (normalize_checked_church checked)
@@ -226,7 +227,7 @@ Definition runWBarNormalization
 Definition runWNormalizationWithCap
     (cap : nat)
     (constants : ConstantInterpretation)
-    (expression : HM.WInCoq.Typing.term)
+    (expression : hmterm)
     : Result WChurchError NormalizationResult :=
   match runWChurchChecked constants expression with
   | Ok checked => Ok (normalize_checked_church_with_cap cap checked)
@@ -239,13 +240,13 @@ Definition default_normalization_cap : nat := 32.
     [runWBarNormalization] available when the bar-recursive computation
     itself is the object of the experiment. *)
 Definition runWNormalization :
-    ConstantInterpretation -> HM.WInCoq.Typing.term ->
+    ConstantInterpretation -> hmterm ->
     Result WChurchError NormalizationResult :=
   runWNormalizationWithCap default_normalization_cap.
 
 Lemma normalize_checked_church_type : forall checked,
   normalization_type (normalize_checked_church checked) =
-  raw_church_systemf_type (checked_church_elaboration checked).
+  church_systemf_type (checked_church_elaboration checked).
 Proof.
   intros [elaboration [T [intrinsic certificate]] Htype].
   exact Htype.
@@ -269,8 +270,8 @@ Qed.
 
 Lemma normalize_checked_church_erases_raw : forall checked,
   normalization_erasure (normalize_checked_church checked) =
-  erase_raw
-    (raw_church_term (checked_church_elaboration checked)).
+  fterm_to_term
+    (church_term (checked_church_elaboration checked)).
 Proof.
   intro checked.
   rewrite normalize_checked_church_erasure.

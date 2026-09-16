@@ -2,13 +2,13 @@ Set Implicit Arguments.
 
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
-From SystemF.HM.WInCoq Require Import LibTactics.
+From SystemF.HM.W Require Import LibTactics.
 
 Require Import Program.
 Require Import List.
-From SystemF.HM.WInCoq Require Import SimpleTypes.
-From SystemF.HM.WInCoq Require Import Occurs.
-From SystemF.HM.WInCoq Require Import Subst.
+From SystemF.HM.W Require Import SimpleTypes.
+From SystemF.HM.W Require Import Occurs.
+From SystemF.HM.W Require Import Subst.
 Require Import Lia.
 
 Section hoare_state_monad.
@@ -110,7 +110,7 @@ Inductive UnifyFailure : ty -> ty -> Set :=
     (forall s', apply_subst s' l = apply_subst s' l' ->
       exists s'', forall v,
         apply_subst s' (var v) =
-        apply_subst (compose_subst s s'') (var v)) ->
+        apply_subst (comp_subst s s'') (var v)) ->
     UnifyFailure (apply_subst s r) (apply_subst s r') ->
     UnifyFailure (arrow l r) (arrow l' r') .
 

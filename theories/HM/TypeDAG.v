@@ -13,7 +13,7 @@
     recursive interpreter and does not duplicate the represented type. *)
 
 From Stdlib Require Import List Arith Lia.
-From SystemF.HM.WInCoq Require Import SimpleTypes.
+From SystemF.HM.W Require Import SimpleTypes.
 
 Import ListNotations.
 

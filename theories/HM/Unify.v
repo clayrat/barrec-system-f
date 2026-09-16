@@ -6,11 +6,11 @@
 From Stdlib Require Import Program.
 From SystemF.HM Require Export
   UnifySpec UnifyFailure UnifyExec UnifyExecCorrect.
-From SystemF.HM.WInCoq Require Import WellFormed.
-From SystemF.HM.WInCoq Require Import Unify.
+From SystemF.HM.W Require Import WellFormed.
+From SystemF.HM.W Require Import Unify.
 
 Definition run_unify (t1 t2 : ty) : unify_result :=
-  match SystemF.HM.WInCoq.Unify.unify'' t1 t2 with
+  match SystemF.HM.W.Unify.unify'' t1 t2 with
   | existT _ _ (inl (exist _ s _)) => unified s
   | existT _ _ (inr _) => rejected
   end.
@@ -20,7 +20,7 @@ Theorem run_unify_sound : forall t1 t2 s,
 Proof.
   intros t1 t2 s Hrun.
   unfold run_unify in Hrun.
-  destruct (SystemF.HM.WInCoq.Unify.unify'' t1 t2) as [variables result].
+  destruct (SystemF.HM.W.Unify.unify'' t1 t2) as [variables result].
   destruct result as [[candidate properties] | failure]; try discriminate.
   inversion Hrun; subst.
   exact (proj1 properties).
@@ -31,7 +31,7 @@ Theorem run_unify_principal : forall t1 t2 s,
 Proof.
   intros t1 t2 s Hrun.
   unfold run_unify in Hrun.
-  destruct (SystemF.HM.WInCoq.Unify.unify'' t1 t2) as [variables result].
+  destruct (SystemF.HM.W.Unify.unify'' t1 t2) as [variables result].
   destruct result as [[candidate properties] | failure]; try discriminate.
   inversion Hrun; subst; clear Hrun.
   destruct properties as [Hunify [_ [_ Hprincipal]]].
@@ -46,7 +46,7 @@ Theorem run_unify_preserves_freshness : forall t1 t2 s,
 Proof.
   intros t1 t2 s Hrun.
   unfold run_unify in Hrun.
-  destruct (SystemF.HM.WInCoq.Unify.unify'' t1 t2) as [variables result].
+  destruct (SystemF.HM.W.Unify.unify'' t1 t2) as [variables result].
   destruct result as [[candidate properties] | failure]; try discriminate.
   inversion Hrun; subst; clear Hrun.
   exact (proj1 (proj2 (proj2 properties))).
@@ -58,7 +58,7 @@ Theorem run_unify_rejected_no_unifier : forall t1 t2,
 Proof.
   intros t1 t2 Hrun.
   unfold run_unify in Hrun.
-  destruct (SystemF.HM.WInCoq.Unify.unify'' t1 t2) as [variables result].
+  destruct (SystemF.HM.W.Unify.unify'' t1 t2) as [variables result].
   destruct result as [[candidate properties] | failure]; try discriminate.
   apply unify_failure_no_unifier. exact failure.
 Qed.
@@ -141,7 +141,7 @@ Program Definition unify_exec_hoare (tau1 tau2 : ty) :
     (forall s', apply_subst s' tau1 = apply_subst s' tau2 ->
       exists s'', forall tau,
         apply_subst s' tau =
-        apply_subst (compose_subst mu s'') tau) /\
+        apply_subst (comp_subst mu s'') tau) /\
     ((new_tv_ty tau1 i /\ new_tv_ty tau2 i) ->
       new_tv_subst mu i) /\
     apply_subst mu tau1 = apply_subst mu tau2) :=

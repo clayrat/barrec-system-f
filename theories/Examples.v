@@ -15,37 +15,37 @@ From SystemF.F Require Import Syntax Check.
 Definition type1 : type := TForall (TArrow (TVar 0) (TVar 0)).
 
 (** Lambda X. lambda x:X. x *)
-Definition term1 : fterm [] type1 :=
-  FTAbs (FAbs (FVar (FVar0 (TVar 0)))).
+Definition term1 : fderiv [] type1 :=
+  DTLam (DLam (DVar (DVar0 (TVar 0)))).
 
 (** lambda x:type1. x[type1] x *)
 Definition type2 : type := TArrow type1 type1.
-Definition term2 : fterm [] type2 :=
-  FAbs (FApp (FTApp (FVar (FVar0 type1)) type1)
-             (FVar (FVar0 type1))).
+Definition term2 : fderiv [] type2 :=
+  DLam (DApp (DTApp (DVar (DVar0 type1)) type1)
+             (DVar (DVar0 type1))).
 
 (** term1[type1] term1 *)
-Definition term3 : fterm [] type1 :=
-  FApp (FTApp term1 type1) term1.
+Definition term3 : fderiv [] type1 :=
+  DApp (DTApp term1 type1) term1.
 
 (** (lambda x:type1. x) term1 *)
-Definition term4 : fterm [] type1 :=
-  FApp (FAbs (FVar (FVar0 type1))) term1.
+Definition term4 : fderiv [] type1 :=
+  DApp (DLam (DVar (DVar0 type1))) term1.
 
 (** The same four inputs before intrinsic type checking. *)
-Definition raw_term1 : RawChurch :=
-  RCTAbs (RCAbs (TVar 0) (RCVar 0)).
+Definition raw_term1 : fterm :=
+  FTLam (FLam (TVar 0) (FVar 0)).
 
-Definition raw_term2 : RawChurch :=
-  RCAbs type1
-    (RCApp (RCTApp (RCVar 0) type1) (RCVar 0)).
+Definition raw_term2 : fterm :=
+  FLam type1
+    (FApp (FTApp (FVar 0) type1) (FVar 0)).
 
-Definition raw_term3 : RawChurch :=
-  RCApp (RCTApp raw_term1 type1) raw_term1.
+Definition raw_term3 : fterm :=
+  FApp (FTApp raw_term1 type1) raw_term1.
 
-Definition raw_term4 : RawChurch :=
-  RCApp (RCAbs type1 (RCVar 0)) raw_term1.
+Definition raw_term4 : fterm :=
+  FApp (FLam type1 (FVar 0)) raw_term1.
 
 Definition erased_examples : list term :=
-  [fterm_to_term term1; fterm_to_term term2;
-   fterm_to_term term3; fterm_to_term term4].
+  [fderiv_to_term term1; fderiv_to_term term2;
+   fderiv_to_term term3; fderiv_to_term term4].

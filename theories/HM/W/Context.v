@@ -1,28 +1,30 @@
 Set Implicit Arguments.
 
-From SystemF.HM.WInCoq Require Import LibTactics.
-From SystemF.HM.WInCoq Require Import ListIds.
-From SystemF.HM.WInCoq Require Import Subst.
-From SystemF.HM.WInCoq Require Import SimpleTypes.
-From SystemF.HM.WInCoq Require Import MyLtacs.
-From SystemF.HM.WInCoq Require Import Disjoints.
-From SystemF.HM.WInCoq Require Import Schemes.
-From SystemF.HM.WInCoq Require Import SubstSchm.
+From SystemF.HM.W Require Import LibTactics.
+From SystemF.HM.W Require Import ListIds.
+From SystemF.HM.W Require Import Subst.
+From SystemF.HM.W Require Import SimpleTypes.
+From SystemF.HM.W Require Import MyLtacs.
+From SystemF.HM.W Require Import Disjoints.
+From SystemF.HM.W Require Import Schemes.
+From SystemF.HM.W Require Import SubstSchm.
 Require Import Arith.Arith_base.
 Require Import List.
 
 (** * Context definition *)
 
-Definition ctx : Set := list (id * schm)%type.
+(** Upstream W-in-Coq calls this type [ctx].  It is [hmctx] here so that
+    [ctx] keeps denoting a System F term context in SystemF.F. *)
+Definition hmctx : Set := list (id * schm)%type.
 
-Fixpoint apply_subst_ctx  (s : substitution) (c : ctx) : ctx :=
+Fixpoint apply_subst_ctx  (s : substitution) (c : hmctx) : hmctx :=
   match c with
   | nil => nil
   | (x, sigma)::xs => (x, apply_subst_schm s sigma)::apply_subst_ctx s xs
   end.
 
 (** Checks if a id is in a context *)
-Fixpoint in_ctx (y : id) (G : ctx) : option schm :=
+Fixpoint in_ctx (y : id) (G : hmctx) : option schm :=
   match G with
   | nil => None
   | ((x, t)::xs) => if eq_id_dec x y then Some t else in_ctx y xs
@@ -36,7 +38,7 @@ Qed.
 
 Hint Resolve apply_subst_ctx_nil:core.
 
-Lemma subst_add_type_scheme : forall (G : ctx) (i : id) (s : substitution) (sigma : schm),
+Lemma subst_add_type_scheme : forall (G : hmctx) (i : id) (s : substitution) (sigma : schm),
     apply_subst_ctx s ((i, sigma)::G) = (i,(apply_subst_schm s sigma))::(apply_subst_ctx s G).
 Proof.
   intros.
@@ -46,7 +48,7 @@ Qed.
 Hint Resolve subst_add_type_scheme:core.
 
 Lemma apply_subst_ctx_compose : forall G s1 s2 ,
-    apply_subst_ctx (compose_subst s1 s2) G = apply_subst_ctx s2 (apply_subst_ctx s1 G).
+    apply_subst_ctx (comp_subst s1 s2) G = apply_subst_ctx s2 (apply_subst_ctx s1 G).
 Proof.  
   induction G .
   - mysimp.
@@ -65,10 +67,10 @@ Qed.
 
 Hint Resolve apply_subst_ctx_eq:core.
 
-Definition FV_ctx (G : ctx) : list id :=
+Definition FV_ctx (G : hmctx) : list id :=
   List.concat (List.map FV_schm (List.map (@snd id schm) G)). 
 
-Lemma not_in_FV_ctx : forall (G : ctx) (st : id) (s: substitution),
+Lemma not_in_FV_ctx : forall (G : hmctx) (st : id) (s: substitution),
     in_list_id st (img_ids s) = false ->
     in_list_id st (FV_ctx G) = false ->
     in_list_id st (FV_ctx (apply_subst_ctx s G)) = false.
@@ -89,7 +91,7 @@ Qed.
 Hint Resolve not_in_FV_ctx:core.
 
 (** Identity condition for apply_ctx *)
-Lemma subst_ctx_when_s_disjoint_with_ctx: forall (G: ctx) (s: substitution),
+Lemma subst_ctx_when_s_disjoint_with_ctx: forall (G: hmctx) (s: substitution),
     (are_disjoints (dom s) (FV_ctx G)) ->
     (apply_subst_ctx s G) = G.
 Proof.
@@ -112,7 +114,7 @@ Qed.
 Hint Resolve subst_ctx_when_s_disjoint_with_ctx:core.
 
 
-Lemma assoc_subst_exists : forall (G : ctx) (i : id) (s : substitution) (sigma : schm),
+Lemma assoc_subst_exists : forall (G : hmctx) (i : id) (s : substitution) (sigma : schm),
     in_ctx i (apply_subst_ctx s G) = Some sigma ->
     {sigma' : schm | in_ctx i G = Some sigma' /\ sigma = apply_subst_schm s sigma'}.
 Proof.

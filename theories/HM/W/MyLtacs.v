@@ -6,9 +6,9 @@
 
 Set Implicit Arguments.
 
-From SystemF.HM.WInCoq Require Import LibTactics.
+From SystemF.HM.W Require Import LibTactics.
 Require Import Arith.Arith_base List Lia.
-From SystemF.HM.WInCoq Require Import SimpleTypes.
+From SystemF.HM.W Require Import SimpleTypes.
 
 Ltac s :=
   match goal with

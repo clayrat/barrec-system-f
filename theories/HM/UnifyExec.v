@@ -10,7 +10,7 @@ From Stdlib Require Import List.
 Import ListNotations.
 
 From SystemF.HM Require Import UnifySpec.
-From SystemF.HM.WInCoq Require Import Occurs.
+From SystemF.HM.W Require Import Occurs.
 
 Inductive unify_result : Set :=
 | unified : substitution -> unify_result
@@ -95,7 +95,7 @@ Fixpoint solve_equations
             match solve_equations variable_fuel'
               (remove eq_id_dec v variables)
               (map (apply_subst_equation [(v, t)]) rest) with
-            | solution s => solution (compose_subst [(v, t)] s)
+            | solution s => solution (comp_subst [(v, t)] s)
             | unsatisfiable => unsatisfiable
             | solver_fuel_exhausted => solver_fuel_exhausted
             end

@@ -15,7 +15,7 @@
 
    The parser resolves both namespaces to de Bruijn indices and consumes the
    complete input. It deliberately performs no typing: a well-formed parsed
-   [RawChurch] still goes through the verified [checkClosed] boundary. *)
+   [fterm] still goes through the verified [checkClosed] boundary. *)
 
 open Systemf
 
@@ -30,7 +30,7 @@ type diagnostic = {
 }
 
 type parse_result =
-  | Church_parsed of rawChurch
+  | Church_parsed of fterm
   | Church_parse_error of diagnostic
 
 exception Frontend_error of diagnostic
@@ -201,7 +201,7 @@ let rec parse_term state term_environment type_environment =
         expect_name state "expected a type-variable name after 'Lambda'"
       in
       expect_fixed state Dot "expected '.' after the type abstraction";
-      RCTAbs
+      FTLam
         (parse_term state term_environment (name :: type_environment))
   | _ -> parse_elimination state term_environment type_environment
 
@@ -220,7 +220,7 @@ and parse_term_lambda state term_environment type_environment =
     expect_fixed state Arrow_token "expected '->' after the typed parameter"
   end else
     expect_fixed state Dot "expected '.' after the parameter type";
-  RCAbs
+  FLam
     (annotation,
      parse_term state (name :: term_environment) type_environment)
 
@@ -232,12 +232,12 @@ and parse_elimination state term_environment type_environment =
         ignore (consume state);
         let argument = parse_type state type_environment in
         expect_fixed state Right_bracket "expected ']' after the type argument";
-        suffixes (RCTApp (accumulated, argument))
+        suffixes (FTApp (accumulated, argument))
     | kind when begins_term_atom kind ->
         let argument =
           parse_term_atom state term_environment type_environment
         in
-        suffixes (RCApp (accumulated, argument))
+        suffixes (FApp (accumulated, argument))
     | _ -> accumulated
   in
   suffixes head
@@ -247,7 +247,7 @@ and parse_term_atom state term_environment type_environment =
   match token.kind with
   | Ident name ->
       ignore (consume state);
-      RCVar (resolve_name "term" name token.span term_environment)
+      FVar (resolve_name "term" name token.span term_environment)
   | Left_paren ->
       ignore (consume state);
       let term = parse_term state term_environment type_environment in

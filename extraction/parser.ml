@@ -29,7 +29,7 @@ type diagnostic = {
 }
 
 type parse_result =
-  | Parsed of term0
+  | Parsed of hmterm
   | Parse_error of diagnostic
 
 exception Frontend_error of diagnostic

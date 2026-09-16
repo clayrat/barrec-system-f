@@ -3,14 +3,14 @@
 From Stdlib Require Import List Lia PeanoNat.
 Import ListNotations.
 
-From SystemF.HM.WInCoq Require Import
+From SystemF.HM.W Require Import
   Context Infer NewTypeVariable SimpleTypes Subst Typing.
 
 (** [runW] deliberately erases the final fresh-variable state carried by
     [W].  Its successful postcondition therefore quantifies that state
     existentially. *)
 Definition runW_success_spec
-    (e : term) (G : ctx) (tau : ty) (s : substitution) : Prop :=
+    (e : hmterm) (G : hmctx) (tau : ty) (s : substitution) : Prop :=
   exists final_state,
     proj1_sig (computeInitialState G) <= final_state /\
     new_tv_subst s final_state /\

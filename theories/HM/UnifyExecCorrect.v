@@ -364,7 +364,7 @@ Qed.
 Lemma equations_unifier_map_compose : forall first second equations,
     equations_unifier
       (map (apply_subst_equation first) equations) second <->
-    equations_unifier equations (compose_subst first second).
+    equations_unifier equations (comp_subst first second).
 Proof.
   intros first second equations.
   induction equations as [| [left right] rest IH]; simpl.
@@ -384,7 +384,7 @@ Qed.
 
 Lemma singleton_binding_absorbed : forall v t s,
     is_unifier (var v) t s -> forall u,
-      apply_subst s u = apply_subst (compose_subst [(v, t)] s) u.
+      apply_subst s u = apply_subst (comp_subst [(v, t)] s) u.
 Proof.
   intros v t s Hunifier u.
   unfold is_unifier in Hunifier.
@@ -564,14 +564,14 @@ Qed.
 
 Lemma singleton_binding_factors : forall v t candidate s residual,
     is_unifier (var v) t candidate ->
-    substitution_equiv candidate (compose_subst s residual) ->
+    substitution_equiv candidate (comp_subst s residual) ->
     substitution_equiv candidate
-      (compose_subst (compose_subst [(v, t)] s) residual).
+      (comp_subst (comp_subst [(v, t)] s) residual).
 Proof.
   intros v t candidate s residual Hbinding Hfactor x.
   rewrite apply_compose_assoc_var.
   rewrite apply_compose_equiv.
-  rewrite <- (substitution_equiv_ty candidate (compose_subst s residual)
+  rewrite <- (substitution_equiv_ty candidate (comp_subst s residual)
     Hfactor (apply_subst [(v, t)] (var x))).
   rewrite <- apply_compose_equiv.
   apply singleton_binding_absorbed.
@@ -601,7 +601,7 @@ Proof.
         exists candidate.
         unfold substitution_equiv.
         intro x.
-        now rewrite compose_subst_nil_l.
+        now rewrite comp_subst_nil_l.
     + intros s Hsolution. discriminate.
     + intros s Hsolution. discriminate.
     + contradiction.
@@ -620,7 +620,7 @@ Proof.
         exists candidate.
         unfold substitution_equiv.
         intro x.
-        now rewrite compose_subst_nil_l.
+        now rewrite comp_subst_nil_l.
     + intros s Hsolution. discriminate.
     + destruct Hscan_spec as [Hneq [Hocc Hscan_spec]].
       destruct (@scan_binding_scope
@@ -846,7 +846,7 @@ Proof.
         -- intros result Hsolution.
            inversion Hsolution; subst result.
            specialize (IH recursive_subst eq_refl).
-           apply new_tv_compose_subst.
+           apply new_tv_comp_subst.
            ++ apply new_ty_to_cons_new_tv_subst.
               ** unfold variables_below in Hbelow.
                  rewrite Forall_forall in Hbelow.

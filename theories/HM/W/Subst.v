@@ -10,9 +10,9 @@ Require Import Wellfounded.Lexicographic_Product.
 Require Import Relation_Operators.
 Require Import Coq.Setoids.Setoid.
 Require Import Program.
-From SystemF.HM.WInCoq Require Import SimpleTypes.
-From SystemF.HM.WInCoq Require Import LibTactics.
-From SystemF.HM.WInCoq Require Import MyLtacs.
+From SystemF.HM.W Require Import SimpleTypes.
+From SystemF.HM.W Require Import LibTactics.
+From SystemF.HM.W Require Import MyLtacs.
 Import ListNotations.
 
 (** * Substitutions *)
@@ -197,55 +197,56 @@ Hint Rewrite img_ids_dist:RE.
 
 (** * Substitution composition *)
 
-Definition compose_subst (s1 s2 : substitution) :=
+(** Upstream W-in-Coq calls this [compose_subst]. *)
+Definition comp_subst (s1 s2 : substitution) :=
       apply_subst_list s1 s2 ++ s2.
 
 (** ** Some obvious facts about composition **)
 
-Lemma compose_subst_nil_l : forall s, compose_subst nil s = s.
+Lemma comp_subst_nil_l : forall s, comp_subst nil s = s.
 Proof.
   intros; induction s; mysimp.
 Qed.
 
-Hint Resolve compose_subst_nil_l:core.
-Hint Rewrite compose_subst_nil_l:RE.
+Hint Resolve comp_subst_nil_l:core.
+Hint Rewrite comp_subst_nil_l:RE.
 
-Lemma compose_subst_nil_r : forall s, compose_subst s nil = s.
+Lemma comp_subst_nil_r : forall s, comp_subst s nil = s.
 Proof.
-  induction s; unfold compose_subst in *; crush.
+  induction s; unfold comp_subst in *; crush.
 Qed.
 
-Hint Resolve compose_subst_nil_r:core.
-Hint Rewrite compose_subst_nil_r:RE.
+Hint Resolve comp_subst_nil_r:core.
+Hint Rewrite comp_subst_nil_r:RE.
 
-Lemma apply_compose_subst_nil_l : forall s t, apply_subst (compose_subst nil s) t = apply_subst s t.
+Lemma apply_comp_subst_nil_l : forall s t, apply_subst (comp_subst nil s) t = apply_subst s t.
 Proof.
   intros; mysimp. 
 Qed.
 
-Hint Resolve apply_compose_subst_nil_l:core.
-Hint Rewrite apply_compose_subst_nil_l:RE.
+Hint Resolve apply_comp_subst_nil_l:core.
+Hint Rewrite apply_comp_subst_nil_l:RE.
 
-Lemma apply_compose_subst_nil_r : forall s t, apply_subst (compose_subst s nil) t = apply_subst s t.
+Lemma apply_comp_subst_nil_r : forall s t, apply_subst (comp_subst s nil) t = apply_subst s t.
 Proof.
   intros; mysimp; induction s; autorewrite with RE using congruence.
 Qed.
 
-Hint Resolve apply_compose_subst_nil_r:core.
-Hint Rewrite apply_compose_subst_nil_r:RE.
+Hint Resolve apply_comp_subst_nil_r:core.
+Hint Rewrite apply_comp_subst_nil_r:RE.
 
 
 (** More lemmas about substitution composition *)
 Lemma apply_compose_equiv : forall s1 s2 t,
-    apply_subst (compose_subst s1 s2) t = apply_subst s2 (apply_subst s1 t).
+    apply_subst (comp_subst s1 s2) t = apply_subst s2 (apply_subst s1 t).
 Proof.
   induction s1; intros; mysimp.
-  repeat rewrite apply_compose_subst_nil_l.  autorewrite with RE using congruence.
+  repeat rewrite apply_comp_subst_nil_l.  autorewrite with RE using congruence.
   induction t; mysimp; simpl in *; eauto.
   repeat rewrite apply_subst_fold.
   erewrite <- IHs1.
   simpl.
-  unfold compose_subst. reflexivity.
+  unfold comp_subst. reflexivity.
   fequals.
 Qed.
 
@@ -253,8 +254,8 @@ Hint Resolve apply_compose_equiv:core.
 Hint Rewrite apply_compose_equiv:RE.
 
 Lemma apply_compose_assoc_var : forall s1 s2 s3 i,
-    apply_subst (compose_subst (compose_subst s1 s2) s3) (var i) =
-    apply_subst (compose_subst s1 (compose_subst s2 s3)) (var i).
+    apply_subst (comp_subst (comp_subst s1 s2) s3) (var i) =
+    apply_subst (comp_subst s1 (comp_subst s2 s3)) (var i).
 Proof.
   induction s1. intros. eauto.
   intros.
@@ -263,7 +264,7 @@ Proof.
 Qed.
 
 (** Lemma about the domain of substitution composition *)
-Lemma dom_dist_compose : forall s1 i t, dom (compose_subst s1 [(i, t)]) = dom s1 ++ [i].
+Lemma dom_dist_compose : forall s1 i t, dom (comp_subst s1 [(i, t)]) = dom s1 ++ [i].
 Proof.
   induction s1; intros; mysimp; simpl in *; eauto.
   rewrite dom_dist_app.
@@ -275,7 +276,7 @@ Qed.
 (** * Lemma about free variables of a composed substitution *)
 
 Lemma FV_subst_compose : forall s1 s2,
-    FV_subst (compose_subst s1 s2) = FV_subst ((apply_subst_list s1 s2) ++ s2).
+    FV_subst (comp_subst s1 s2) = FV_subst ((apply_subst_list s1 s2) ++ s2).
 Proof.
   induction s1; crush.
 Qed.
@@ -312,7 +313,7 @@ Hint Rewrite find_subst_some_app:RE.
 
 
 Lemma find_subst_none_apply_compose : forall (s1 s2 : substitution) (st : id),
- find_subst s1 st = None -> apply_subst (compose_subst s1 s2) (var st) = apply_subst s2 (var st).
+ find_subst s1 st = None -> apply_subst (comp_subst s1 s2) (var st) = apply_subst s2 (var st).
 Proof.
   intros.
   induction s1.

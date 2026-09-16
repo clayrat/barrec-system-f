@@ -9,17 +9,17 @@ Set Implicit Arguments.
 Require Import Arith.Arith_base List Lia.
 Require Import Wellfounded.Lexicographic_Product.
 Require Import Relation_Operators.
-From SystemF.HM.WInCoq Require Import LibTactics.
+From SystemF.HM.W Require Import LibTactics.
 Require Import Coq.Setoids.Setoid.
 Require Import Program.
-From SystemF.HM.WInCoq Require Import HoareMonad.
-From SystemF.HM.WInCoq Require Import SimpleTypes.
-From SystemF.HM.WInCoq Require Import Subst.
-From SystemF.HM.WInCoq Require Import NewTypeVariable.
-From SystemF.HM.WInCoq Require Import MyLtacs.
-From SystemF.HM.WInCoq Require Import Varctxt.
-From SystemF.HM.WInCoq Require Import Occurs.
-From SystemF.HM.WInCoq Require Import WellFormed.
+From SystemF.HM.W Require Import HoareMonad.
+From SystemF.HM.W Require Import SimpleTypes.
+From SystemF.HM.W Require Import Subst.
+From SystemF.HM.W Require Import NewTypeVariable.
+From SystemF.HM.W Require Import MyLtacs.
+From SystemF.HM.W Require Import Varctxt.
+From SystemF.HM.W Require Import Occurs.
+From SystemF.HM.W Require Import WellFormed.
 
 (** The size of a type. This is used in by the termination argument of
     the unification algorithm.  *)
@@ -114,7 +114,7 @@ Definition unifier (t1 t2 : ty) (s : substitution) : Prop := apply_subst s t1 = 
 (** A lemma about unifiers and variable substitutions. *)
 Lemma unifier_arrowend : forall v t t1 t2 s,
     unifier (apply_subst ((v, t) :: nil) t1) (apply_subst ((v, t) :: nil) t2) s ->
-    unifier t1 t2 (compose_subst ((v,t)::nil) s).
+    unifier t1 t2 (comp_subst ((v,t)::nil) s).
 Proof.
   intros.
   unfold unifier in *.
@@ -152,7 +152,7 @@ Definition unify_type (c : constraints) :=
   ({ s | unifier (fst (get_tys c)) (snd (get_tys c)) s /\ wf_subst (get_ctxt c) s /\
          (forall st, (new_tv_ty (fst (get_tys c)) st /\ new_tv_ty (snd (get_tys c)) st) -> new_tv_subst s st) /\
          forall s', unifier (fst (get_tys c)) (snd (get_tys c)) s' ->
-               exists s'', forall v, apply_subst s' (var v) = apply_subst (compose_subst s s'') (var v)})
+               exists s'', forall v, apply_subst s' (var v) = apply_subst (comp_subst s s'') (var v)})
     (UnifyFailure (fst (get_tys c)) (snd (get_tys c))) .
 
 Unset Implicit Arguments.
@@ -190,7 +190,7 @@ Program Fixpoint unify' (l : constraints) {wf constraints_lt l} : unify_type l :
                                                                         (apply_subst s1 r1) (apply_subst s1 r2)) _ with
                                            | inr _ E => inr _ _
                                            | inl _ (exist _ s2 HS') =>
-                                             inl _ (@exist substitution _ (compose_subst s1 s2) _)
+                                             inl _ (@exist substitution _ (comp_subst s1 s2) _)
                                            end
                                          end
           | (arrow _ _, con _) => inr _ _
@@ -290,7 +290,7 @@ Next Obligation.
   unfold unifier in *.
   splits; crush.
   - inversion H. inversion H0. subst.
-    eapply new_tv_compose_subst; eauto. eapply n; eauto.
+    eapply new_tv_comp_subst; eauto. eapply n; eauto.
     splits; eauto. 
   - intros.
     inversion H.
@@ -399,7 +399,7 @@ Definition unify'' : forall t1 t2 : ty,
     {x & sum ({ s | unifier t1 t2 s /\ wf_subst x s /\
                 (forall st, (new_tv_ty t1 st /\ new_tv_ty t2 st) -> new_tv_subst s st) /\
                 forall s', unifier t1 t2 s' ->
-                           exists s'', forall v, apply_subst s' (var v) = apply_subst (compose_subst s s'') (var v)})
+                           exists s'', forall v, apply_subst s' (var v) = apply_subst (comp_subst s s'') (var v)})
          (UnifyFailure t1 t2)} .
 Proof.
   intros.
@@ -418,7 +418,7 @@ Program Definition unify (tau1 tau2 : ty) :
   @Infer (@top id) substitution (fun i mu f =>
                                    i = f /\
                                    (forall s', apply_subst s' tau1 = apply_subst s' tau2 ->
-                                          exists s'', forall tau, apply_subst s' tau = apply_subst (compose_subst mu s'') tau) /\
+                                          exists s'', forall tau, apply_subst s' tau = apply_subst (comp_subst mu s'') tau) /\
                                    ((new_tv_ty tau1 i /\ new_tv_ty tau2 i) -> new_tv_subst mu i) /\
                                    apply_subst mu tau1 = apply_subst mu tau2) :=
   match unify'' tau1 tau2 as y  with

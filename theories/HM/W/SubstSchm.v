@@ -6,20 +6,20 @@
 
 Set Implicit Arguments.
 
-From SystemF.HM.WInCoq Require Import ListIds.
-From SystemF.HM.WInCoq Require Import Subst.
-From SystemF.HM.WInCoq Require Import SimpleTypes.
-From SystemF.HM.WInCoq Require Import MyLtacs.
-From SystemF.HM.WInCoq Require Import Disjoints.
+From SystemF.HM.W Require Import ListIds.
+From SystemF.HM.W Require Import Subst.
+From SystemF.HM.W Require Import SimpleTypes.
+From SystemF.HM.W Require Import MyLtacs.
+From SystemF.HM.W Require Import Disjoints.
 Require Import Arith.Arith_base List Lia.
 Require Import Wellfounded.Lexicographic_Product.
 Require Import Relation_Operators.
 Require Import Coq.Setoids.Setoid.
-From SystemF.HM.WInCoq Require Import LibTactics.
-From SystemF.HM.WInCoq Require Import Schemes.
-From SystemF.HM.WInCoq Require Import NthErrorTools.
+From SystemF.HM.W Require Import LibTactics.
+From SystemF.HM.W Require Import Schemes.
+From SystemF.HM.W Require Import NthErrorTools.
 
-From SystemF.HM.WInCoq Require Import LibTactics.
+From SystemF.HM.W Require Import LibTactics.
 
 
 (** * Simple Substitution on schemes *)
@@ -548,11 +548,11 @@ Qed.
 Hint Resolve subst_schm_when_dom_s_disjoint_with_FV_schm:core.
 Hint Rewrite subst_schm_when_dom_s_disjoint_with_FV_schm:RE.
 
-Lemma apply_schm_compose_equiv : forall s1 s2 sigma, apply_subst_schm (compose_subst s1 s2) sigma =
+Lemma apply_schm_compose_equiv : forall s1 s2 sigma, apply_subst_schm (comp_subst s1 s2) sigma =
                                                 apply_subst_schm s2 (apply_subst_schm s1 sigma).
 Proof.
   intros.
-  induction s1; intros; mysimp. rewrite apply_subst_schm_nil. rewrite compose_subst_nil_l.  reflexivity.
+  induction s1; intros; mysimp. rewrite apply_subst_schm_nil. rewrite comp_subst_nil_l.  reflexivity.
   induction sigma; mysimp; simpl in *; eauto.
   inversion IHs1.
   fequals; eauto.

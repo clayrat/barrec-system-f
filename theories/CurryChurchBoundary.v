@@ -11,12 +11,12 @@ From Stdlib Require Import List.
 Import ListNotations.
 
 From SystemF.F Require Import Syntax Check.
-From SystemF.HM.WInCoq Require Import SimpleTypes Typing.
+From SystemF.HM.W Require Import SimpleTypes Typing.
 From SystemF Require Import HMElab.
 
 (** The Curry term [fun x => x]. *)
 Definition boundary_curry_identity : SystemF.F.Syntax.term :=
-  Abs (Var 0).
+  Lam (Var 0).
 
 Definition boundary_identity_type : type :=
   TForall (TArrow (TVar 0) (TVar 0)).
@@ -31,25 +31,25 @@ Definition boundary_identity_arrow_type : type :=
 
     Their types differ, so erasure alone cannot tell the checker which one the
     programmer intended. *)
-Definition boundary_raw_polymorphic_identity : RawChurch :=
-  RCTAbs (RCAbs (TVar 0) (RCVar 0)).
+Definition boundary_raw_polymorphic_identity : fterm :=
+  FTLam (FLam (TVar 0) (FVar 0)).
 
-Definition boundary_raw_identity_at_identity_type : RawChurch :=
-  RCAbs boundary_identity_type (RCVar 0).
+Definition boundary_raw_identity_at_identity_type : fterm :=
+  FLam boundary_identity_type (FVar 0).
 
 (** These two terms also erase to the same Curry application.  The first uses
     an explicit type application; the second uses a term lambda annotation. *)
-Definition boundary_raw_type_application : RawChurch :=
-  RCApp
-    (RCTApp boundary_raw_polymorphic_identity boundary_identity_type)
+Definition boundary_raw_type_application : fterm :=
+  FApp
+    (FTApp boundary_raw_polymorphic_identity boundary_identity_type)
     boundary_raw_polymorphic_identity.
 
-Definition boundary_raw_annotated_application : RawChurch :=
-  RCApp
-    (RCAbs boundary_identity_type (RCVar 0))
+Definition boundary_raw_annotated_application : fterm :=
+  FApp
+    (FLam boundary_identity_type (FVar 0))
     boundary_raw_polymorphic_identity.
 
-Definition boundary_checked_type (raw : RawChurch) : option type :=
+Definition boundary_checked_type (raw : fterm) : option type :=
   match checkClosed raw with
   | Ok checked => Some (projT1 checked)
   | Err _ => None
@@ -63,8 +63,8 @@ Theorem boundary_identity_church_choices_check :
 Proof. split; reflexivity. Qed.
 
 Theorem boundary_identity_erasure_is_many_to_one :
-  erase_raw boundary_raw_polymorphic_identity = boundary_curry_identity /\
-  erase_raw boundary_raw_identity_at_identity_type = boundary_curry_identity /\
+  fterm_to_term boundary_raw_polymorphic_identity = boundary_curry_identity /\
+  fterm_to_term boundary_raw_identity_at_identity_type = boundary_curry_identity /\
   boundary_identity_type <> boundary_identity_arrow_type.
 Proof.
   repeat split; try reflexivity.
@@ -72,8 +72,8 @@ Proof.
 Qed.
 
 Theorem boundary_type_application_disappears :
-  erase_raw boundary_raw_type_application =
-    erase_raw boundary_raw_annotated_application /\
+  fterm_to_term boundary_raw_type_application =
+    fterm_to_term boundary_raw_annotated_application /\
   boundary_checked_type boundary_raw_type_application =
     Some boundary_identity_type /\
   boundary_checked_type boundary_raw_annotated_application =
@@ -88,19 +88,19 @@ Qed.
 (** The rank-1 route starts from a separate HM AST.  W supplies a principal
     scheme, and the existing elaborator inserts exactly the type abstraction
     and lambda annotation needed by the Church checker. *)
-Definition boundary_hm_identity : SystemF.HM.WInCoq.Typing.term :=
+Definition boundary_hm_identity : hmterm :=
   lam_t 0 (var_t 0).
 
 Definition boundary_constant_type
-    (_ : SystemF.HM.WInCoq.SimpleTypes.id) : type :=
+    (_ : SystemF.HM.W.SimpleTypes.id) : type :=
   boundary_identity_type.
 
-Definition boundary_hm_identity_church_view : option (type * RawChurch) :=
+Definition boundary_hm_identity_church_view : option (type * fterm) :=
   match runWChurch boundary_constant_type boundary_hm_identity with
   | Ok elaboration =>
       Some
-        (raw_church_systemf_type elaboration,
-         raw_church_term elaboration)
+        (church_systemf_type elaboration,
+         church_term elaboration)
   | Err _ => None
   end.
 
@@ -112,5 +112,5 @@ Theorem boundary_HM_restores_rank1_annotations :
 Proof. reflexivity. Qed.
 
 Theorem boundary_HM_restored_term_has_original_erasure :
-  erase_raw boundary_raw_polymorphic_identity = boundary_curry_identity.
+  fterm_to_term boundary_raw_polymorphic_identity = boundary_curry_identity.
 Proof. reflexivity. Qed.

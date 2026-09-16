@@ -6,13 +6,13 @@
 Set Implicit Arguments.
 
 Require Import Arith.Arith_base List Lia.
-From SystemF.HM.WInCoq Require Import LibTactics.
+From SystemF.HM.W Require Import LibTactics.
 Require Import Program.
-From SystemF.HM.WInCoq Require Import SimpleTypes.
-From SystemF.HM.WInCoq Require Import Subst.
-From SystemF.HM.WInCoq Require Import Varctxt.
-From SystemF.HM.WInCoq Require Import Occurs.
-From SystemF.HM.WInCoq Require Import MyLtacs.
+From SystemF.HM.W Require Import SimpleTypes.
+From SystemF.HM.W Require Import Subst.
+From SystemF.HM.W Require Import Varctxt.
+From SystemF.HM.W Require Import Occurs.
+From SystemF.HM.W Require Import MyLtacs.
 Import ListNotations.
 
 (** * Well formed defintion for types *)
@@ -59,10 +59,10 @@ Definition wf_tys (C : varctxt) (t1 t2 : ty)  : Prop := wf_ty C t1 /\ wf_ty C t2
 
     This is formalized by the lemma subst_remove. *)
 
-Lemma subst_remove : forall t x ctx,
-    wf_ty ctx t -> member ctx x ->
-    forall u, wf_ty (remove x ctx) u ->
-         wf_ty (remove x ctx) (apply_subst ((x, u)::nil) t).
+Lemma subst_remove : forall t x hmctx,
+    wf_ty hmctx t -> member hmctx x ->
+    forall u, wf_ty (remove x hmctx) u ->
+         wf_ty (remove x hmctx) (apply_subst ((x, u)::nil) t).
 Proof.
   induction t ; crush.
 Qed.
@@ -356,7 +356,7 @@ Lemma wf_subst_last (s : substitution) :
   forall x t C, wf_subst C s ->
            member (minus C (dom s)) x ->
            wf_ty (remove x (minus C (dom s))) t ->
-           wf_subst C (compose_subst s [(x,t)]).
+           wf_subst C (comp_subst s [(x,t)]).
 Proof.
   induction s ; simpl ; intros . mysimp. eauto.
   destruct a. destructs H.
@@ -368,7 +368,7 @@ Proof.
   rewrite minus_app_comm. simpl. eauto. 
   rewrite dom_dist_app. rewrite apply_subst_list_dom. simpl.
   rewrite minus_app_comm. simpl. eauto. 
-  fold (compose_subst s [(x, t)]).
+  fold (comp_subst s [(x, t)]).
   eapply IHs with (C:= remove i C); eauto.
   rewrite minus_remove. auto.
   rewrite minus_remove. auto.
@@ -380,11 +380,11 @@ Qed.
 
 Lemma compose_cons : forall s1 s2 i t C,
     wf_subst C s1 -> wf_subst C ((i, t) :: s2) ->
-    wf_subst C (compose_subst (compose_subst s1 [(i, t)]) s2) ->
-    wf_subst C (compose_subst s1 ((i, t) :: s2)).
+    wf_subst C (comp_subst (comp_subst s1 [(i, t)]) s2) ->
+    wf_subst C (comp_subst s1 ((i, t) :: s2)).
 Proof.
   intros.
-  unfold compose_subst in *.
+  unfold comp_subst in *.
   rewrite arrowcons.
   assert ((apply_subst_list s1 ((i, t) :: s2) ++ [(i, t)]) =
           apply_subst_list (apply_subst_list s1 [(i, t)] ++ [(i, t)]) s2).
@@ -394,7 +394,7 @@ Proof.
     mysimp. fequals; eauto.
   } 
   rewrite H2.
-  fold (compose_subst s1 [(i, t)]) .
+  fold (comp_subst s1 [(i, t)]) .
   eauto.
 Qed.
 
@@ -405,9 +405,9 @@ Qed.
 Lemma wf_subst_arrowend : forall s2 C s1,
     wf_subst C s1 ->
     wf_subst (minus C (dom s1)) s2 ->
-    wf_subst C (compose_subst s1 s2).
+    wf_subst C (comp_subst s1 s2).
 Proof.
-  induction s2 ; simpl ; intros. rewrite compose_subst_nil_r ; auto.
+  induction s2 ; simpl ; intros. rewrite comp_subst_nil_r ; auto.
   destruct a. destructs H0.
   eapply compose_cons; eauto. simpl. splits; eauto.
   apply wf_ty_remove_minus_inversion in H1. assumption. eauto.

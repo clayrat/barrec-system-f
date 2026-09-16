@@ -7,22 +7,22 @@
 
 Set Implicit Arguments.
 
-From SystemF.HM.WInCoq Require Import SimpleTypes.
-From SystemF.HM.WInCoq Require Import Gen.
+From SystemF.HM.W Require Import SimpleTypes.
+From SystemF.HM.W Require Import Gen.
 Require Import Lia.
 Require Import Arith.
-From SystemF.HM.WInCoq Require Import Schemes.
-From SystemF.HM.WInCoq Require Import Context.
-From SystemF.HM.WInCoq Require Import SubstSchm.
+From SystemF.HM.W Require Import Schemes.
+From SystemF.HM.W Require Import Context.
+From SystemF.HM.W Require Import SubstSchm.
 Require Import List.
-From SystemF.HM.WInCoq Require Import MyLtacs.
-From SystemF.HM.WInCoq Require Import Subst.
-From SystemF.HM.WInCoq Require Import SubstSchm.
-From SystemF.HM.WInCoq Require Import ListIds.
-From SystemF.HM.WInCoq Require Import Context.
+From SystemF.HM.W Require Import MyLtacs.
+From SystemF.HM.W Require Import Subst.
+From SystemF.HM.W Require Import SubstSchm.
+From SystemF.HM.W Require Import ListIds.
+From SystemF.HM.W Require Import Context.
 Require Import Relation_Operators.
 Require Import Coq.Setoids.Setoid.
-From SystemF.HM.WInCoq Require Import LibTactics.
+From SystemF.HM.W Require Import LibTactics.
 
 (** * New type variable definition for simple types *)
 
@@ -81,7 +81,7 @@ Qed.
 
 Hint Resolve new_tv_ty_trans_le:core.
 
-Lemma new_tv_compose_subst_type : forall (s s1 s2 : substitution) (st : id) (tau : ty),
+Lemma new_tv_comp_subst_type : forall (s s1 s2 : substitution) (st : id) (tau : ty),
     (forall i : id, i < st -> apply_subst s (var i) = apply_subst s2 (apply_subst s1 (var i))) ->
     new_tv_ty tau st -> apply_subst s tau = apply_subst s2 (apply_subst s1 tau).
   induction tau.
@@ -93,8 +93,8 @@ Lemma new_tv_compose_subst_type : forall (s s1 s2 : substitution) (st : id) (tau
     fequals; eauto.
 Qed.
 
-Hint Resolve new_tv_compose_subst_type:core.
-Hint Rewrite new_tv_compose_subst_type:RE.
+Hint Resolve new_tv_comp_subst_type:core.
+Hint Rewrite new_tv_comp_subst_type:RE.
 
 (** * New type variable definition for schemes *)
 
@@ -274,9 +274,9 @@ Hint Resolve new_tv_schm_compute_inst_subst:core.
 
 (** * New type variable definition for contexts *)
 
-Inductive new_tv_ctx : ctx -> id -> Prop :=
+Inductive new_tv_ctx : hmctx -> id -> Prop :=
 | new_tv_ctx_nil : forall i : id, new_tv_ctx nil i
-| new_tv_ctx_cons : forall (G : ctx) (i x : id) (sigma : schm),
+| new_tv_ctx_cons : forall (G : hmctx) (i x : id) (sigma : schm),
     new_tv_ctx G i ->
     new_tv_schm sigma i ->
     new_tv_ctx ((x, sigma) :: G) i.
@@ -285,7 +285,7 @@ Hint Constructors new_tv_ctx:core.
 
 (** ** Lemmas that are only about new type variables for contexts (and simple types and schemes). *)
 
-Lemma new_tv_compose_subst_ctx : forall (s s1 s2 : substitution) (st : id) (G : ctx),
+Lemma new_tv_comp_subst_ctx : forall (s s1 s2 : substitution) (st : id) (G : hmctx),
     (forall x : id, x < st -> apply_subst s (var x) = apply_subst s2 (apply_subst s1 (var x))) ->
     new_tv_ctx G st -> apply_subst_ctx s G = apply_subst_ctx s2 (apply_subst_ctx s1 G).
 Proof.
@@ -351,7 +351,7 @@ Qed.
 
 Hint Resolve new_tv_ctx_Succ:core.
 
-Lemma new_tv_ctx_implies_new_tv_schm : forall (G : ctx) (sigma : schm) (st x : id),
+Lemma new_tv_ctx_implies_new_tv_schm : forall (G : hmctx) (sigma : schm) (st x : id),
     in_ctx x G = Some sigma -> new_tv_ctx G st -> new_tv_schm sigma st.
 Proof.
   induction G; crush.
@@ -386,7 +386,7 @@ Qed.
 
 Hint Resolve new_tv_ctx_apply_subst_ctx:core.
 
-Lemma add_subst_add_ctx : forall (G : ctx) (s : substitution) (x : id) (st : id) (tau : ty),
+Lemma add_subst_add_ctx : forall (G : hmctx) (s : substitution) (x : id) (st : id) (tau : ty),
     new_tv_ctx G st ->
     apply_subst_ctx ((st, tau)::s) ((x, sc_var st)::G) =
     (x, (ty_to_schm tau)) :: (apply_subst_ctx s G).
@@ -408,7 +408,7 @@ Qed.
 
 Hint Resolve new_tv_ctx_inversion:core.
 
-Lemma new_tv_gen_aux_ty: forall (tau : ty) (G : ctx) (st : id) l,
+Lemma new_tv_gen_aux_ty: forall (tau : ty) (G : hmctx) (st : id) l,
     new_tv_ty tau st -> new_tv_ctx G st -> new_tv_schm (fst (gen_ty_aux tau G l)) st.
 Proof.
   induction tau; crush.
@@ -423,7 +423,7 @@ Qed.
 
 Hint Resolve new_tv_gen_aux_ty:core.
 
-Lemma new_tv_gen_ty: forall (tau : ty) (G : ctx) (st : id),
+Lemma new_tv_gen_ty: forall (tau : ty) (G : hmctx) (st : id),
     new_tv_ty tau st -> new_tv_ctx G st -> new_tv_schm (gen_ty tau G) st.
 Proof.
   induction tau; unfold gen_ty; eauto.
@@ -650,14 +650,14 @@ Qed.
 
 Hint Resolve new_tv_subst_list:core.
 
-Lemma new_tv_compose_subst : forall (s1 s2 : substitution) (i : id),
+Lemma new_tv_comp_subst : forall (s1 s2 : substitution) (i : id),
     new_tv_subst s1 i ->
     new_tv_subst s2 i ->
-    new_tv_subst (compose_subst s1 s2) i.
+    new_tv_subst (comp_subst s1 s2) i.
 Proof.
   induction s1, s2; crush.
   inversion H. inversion H0. subst.
-  unfold compose_subst.
+  unfold comp_subst.
   econstructor.
   intros.
   unfold FV_subst in *.
@@ -684,7 +684,7 @@ Proof.
   auto.
 Qed.
 
-Hint Resolve new_tv_compose_subst:core.
+Hint Resolve new_tv_comp_subst:core.
 
 Lemma new_tv_subst_nil : forall st, new_tv_subst nil st.
 Proof.
@@ -693,7 +693,7 @@ Qed.
 
 Hint Resolve new_tv_subst_nil:core.
 
-Lemma new_tv_s_ctx : forall (st : id) (s : substitution) (G : ctx),
+Lemma new_tv_s_ctx : forall (st : id) (s : substitution) (G : hmctx),
     new_tv_ctx G st -> new_tv_subst s st -> new_tv_ctx (apply_subst_ctx s G) st.
 Proof.
   induction G; crush.

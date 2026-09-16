@@ -726,29 +726,29 @@ Qed.
 
 (** ** Interpretation of intrinsically typed terms *)
 
-Fixpoint fterm_sem
+Fixpoint fderiv_sem
     (model : ParametricModel)
-    {context T} (term : fterm context T)
+    {ctx T} (term : fderiv ctx T)
     (type_environment : Environment (SemanticType model))
     (value_environment : Environment (model_value model)) :
     model_value model :=
   match term with
-  | FVar variable => value_environment (fvar_to_nat variable)
-  | FAbs body =>
+  | DVar variable => value_environment (dvar_to_nat variable)
+  | DLam body =>
       model_abstract model (fun argument =>
-        fterm_sem model body type_environment
+        fderiv_sem model body type_environment
           (env_extend argument value_environment))
-  | FApp function argument =>
+  | DApp function argument =>
       model_apply model
-        (fterm_sem model function type_environment value_environment)
-        (fterm_sem model argument type_environment value_environment)
-  | FTAbs body =>
+        (fderiv_sem model function type_environment value_environment)
+        (fderiv_sem model argument type_environment value_environment)
+  | DTLam body =>
       model_type_abstract model (fun A =>
-        fterm_sem model body (env_extend A type_environment)
+        fderiv_sem model body (env_extend A type_environment)
           value_environment)
-  | FTApp function U =>
+  | DTApp function U =>
       model_type_apply model
-        (fterm_sem model function type_environment value_environment)
+        (fderiv_sem model function type_environment value_environment)
         (source_type_sem model type_environment U)
   end.
 
@@ -758,80 +758,80 @@ Definition env_tail {A : Type}
 
 Fixpoint term_environment_sem
     (model : RelModel)
-    (context : list type)
+    (ctx : list type)
     (types : Environment (SemanticType model))
     (values : Environment (model_value model)) : Prop :=
-  match context with
+  match ctx with
   | [] => True
-  | T :: context' =>
+  | T :: ctx' =>
       source_type_sem model types T (values 0) /\
-      term_environment_sem model context' types (env_tail values)
+      term_environment_sem model ctx' types (env_tail values)
   end.
 
 Fixpoint term_environment_rel
     (model : RelModel)
-    (context : list type)
+    (ctx : list type)
     (left_types right_types : Environment (SemanticType model))
     (relations : Environment (SemanticRelation model))
     (left_values right_values : Environment (model_value model)) : Prop :=
-  match context with
+  match ctx with
   | [] => True
-  | T :: context' =>
+  | T :: ctx' =>
       source_type_rel model T left_types right_types relations
         (left_values 0) (right_values 0) /\
-      term_environment_rel model context'
+      term_environment_rel model ctx'
         left_types right_types relations
         (env_tail left_values) (env_tail right_values)
   end.
 
 Lemma term_environment_sem_lookup : forall (model : RelModel)
-    context T (variable : fvar context T) types values,
-  term_environment_sem model context types values ->
+    ctx T (variable : dvar ctx T) types values,
+  term_environment_sem model ctx types values ->
   source_type_sem model types T
-    (values (fvar_to_nat variable)).
+    (values (dvar_to_nat variable)).
 Proof.
-  intros model context T variable.
-  induction variable as [context T | context T U variable IHvariable];
-    intros types values Hcontext.
-  - exact (proj1 Hcontext).
+  intros model ctx T variable.
+  induction variable as [ctx T | ctx T U variable IHvariable];
+    intros types values Hctx.
+  - exact (proj1 Hctx).
   - change (source_type_sem model types T
-      ((env_tail values) (fvar_to_nat variable))).
+      ((env_tail values) (dvar_to_nat variable))).
     apply IHvariable.
-    exact (proj2 Hcontext).
+    exact (proj2 Hctx).
 Qed.
 
 Lemma term_environment_rel_lookup : forall (model : RelModel)
-    context T (variable : fvar context T)
+    ctx T (variable : dvar ctx T)
     left_types right_types relations left_values right_values,
-  term_environment_rel model context left_types right_types relations
+  term_environment_rel model ctx left_types right_types relations
     left_values right_values ->
   source_type_rel model T left_types right_types relations
-    (left_values (fvar_to_nat variable))
-    (right_values (fvar_to_nat variable)).
+    (left_values (dvar_to_nat variable))
+    (right_values (dvar_to_nat variable)).
 Proof.
-  intros model context T variable.
-  induction variable as [context T | context T U variable IHvariable];
-    intros left_types right_types relations left_values right_values Hcontext.
-  - exact (proj1 Hcontext).
+  intros model ctx T variable.
+  induction variable as [ctx T | ctx T U variable IHvariable];
+    intros left_types right_types relations left_values right_values Hctx.
+  - exact (proj1 Hctx).
   - change (source_type_rel model T left_types right_types relations
-      ((env_tail left_values) (fvar_to_nat variable))
-      ((env_tail right_values) (fvar_to_nat variable))).
+      ((env_tail left_values) (dvar_to_nat variable))
+      ((env_tail right_values) (dvar_to_nat variable))).
     apply IHvariable.
-    exact (proj2 Hcontext).
+    exact (proj2 Hctx).
 Qed.
 
 Lemma term_environment_sem_lift_zero : forall (model : RelModel)
-    context types values head,
-  term_environment_sem model context types values ->
-  term_environment_sem model (map (type_lift 0) context)
+    ctx types values head,
+  term_environment_sem model ctx types values ->
+  term_environment_sem model (map (type_lift 0) ctx)
     (env_extend head types) values.
 Proof.
-  intros model context.
-  induction context as [| T context IHcontext];
-    intros types values head Hcontext.
+  intros model ctx.
+  induction ctx as [| T ctx IHctx];
+    intros types values head Hctx.
   - exact I.
   - cbn [map term_environment_sem] in *.
-    destruct Hcontext as [HT Hcontext].
+    destruct Hctx as [HT Hctx].
     split.
     + assert (Hlift : lifted_type_environment 0
           (env_extend head types) types).
@@ -842,27 +842,27 @@ Proof.
         (source_type_sem_lift_correct model T 0
           (env_extend head types) types Hlift (values 0))).
       exact HT.
-    + now apply IHcontext.
+    + now apply IHctx.
 Qed.
 
 Lemma term_environment_rel_lift_zero : forall (model : RelModel)
-    context left_types right_types relations left_values right_values
+    ctx left_types right_types relations left_values right_values
     left_head right_head relation_head,
-  term_environment_rel model context
+  term_environment_rel model ctx
     left_types right_types relations left_values right_values ->
-  term_environment_rel model (map (type_lift 0) context)
+  term_environment_rel model (map (type_lift 0) ctx)
     (env_extend left_head left_types)
     (env_extend right_head right_types)
     (env_extend relation_head relations)
     left_values right_values.
 Proof.
-  intros model context.
-  induction context as [| T context IHcontext];
+  intros model ctx.
+  induction ctx as [| T ctx IHctx];
     intros left_types right_types relations left_values right_values
-      left_head right_head relation_head Hcontext.
+      left_head right_head relation_head Hctx.
   - exact I.
   - cbn [map term_environment_rel] in *.
-    destruct Hcontext as [HT Hcontext].
+    destruct Hctx as [HT Hctx].
     split.
     + assert (Hleft : lifted_type_environment 0
           (env_extend left_head left_types) left_types).
@@ -887,104 +887,104 @@ Proof.
           Hleft Hright Hrelations
           (left_values 0) (right_values 0))).
       exact HT.
-    + now apply IHcontext.
+    + now apply IHctx.
 Qed.
 
 (** Ordinary semantic type soundness is recorded separately.  It supplies
     the endpoint-membership components used by the abstraction theorem. *)
-Theorem fterm_sem_typed : forall (model : ParametricModel)
-    context T (term : fterm context T) types values,
-  term_environment_sem model context types values ->
+Theorem fderiv_sem_typed : forall (model : ParametricModel)
+    ctx T (term : fderiv ctx T) types values,
+  term_environment_sem model ctx types values ->
   source_type_sem model types T
-    (fterm_sem model term types values).
+    (fderiv_sem model term types values).
 Proof.
-  intros model context T term.
+  intros model ctx T term.
   induction term as
-      [context T variable
-       | context T U body IHbody
-       | context T U function IHfunction argument IHargument
-       | context T body IHbody
-       | context T function IHfunction U];
-    intros types values Hcontext.
+      [ctx T variable
+       | ctx T U body IHbody
+       | ctx T U function IHfunction argument IHargument
+       | ctx T body IHbody
+       | ctx T function IHfunction U];
+    intros types values Hctx.
   - apply term_environment_sem_lookup.
-    exact Hcontext.
-  - cbn [fterm_sem source_type_sem].
+    exact Hctx.
+  - cbn [fderiv_sem source_type_sem].
     intros argument Hargument.
     rewrite model_abstract_beta.
     apply IHbody.
     cbn [term_environment_sem env_extend env_tail].
     split.
     + exact Hargument.
-    + exact Hcontext.
-  - cbn [fterm_sem].
-    apply (IHfunction types values Hcontext).
+    + exact Hctx.
+  - cbn [fderiv_sem].
+    apply (IHfunction types values Hctx).
     apply IHargument.
-    exact Hcontext.
-  - cbn [fterm_sem source_type_sem].
+    exact Hctx.
+  - cbn [fderiv_sem source_type_sem].
     intros A.
     rewrite model_type_abstract_beta.
     apply IHbody.
     apply term_environment_sem_lift_zero.
-    exact Hcontext.
-  - cbn [fterm_sem].
+    exact Hctx.
+  - cbn [fderiv_sem].
     apply (proj2
       (source_type_sem_subst_correct model T 0
         types U
         (env_extend (source_type_sem model types U) types)
         (substituted_type_environment_zero model types U)
         (model_type_apply model
-          (fterm_sem model function types values)
+          (fderiv_sem model function types values)
           (source_type_sem model types U)))).
     apply IHfunction.
-    exact Hcontext.
+    exact Hctx.
 Qed.
 
 (** ** Fundamental theorem *)
 
-Theorem fterm_parametricity : forall (model : ParametricModel)
-    context T (term : fterm context T)
+Theorem fderiv_parametricity : forall (model : ParametricModel)
+    ctx T (term : fderiv ctx T)
     left_types right_types relations left_values right_values,
-  term_environment_sem model context left_types left_values ->
-  term_environment_sem model context right_types right_values ->
-  term_environment_rel model context
+  term_environment_sem model ctx left_types left_values ->
+  term_environment_sem model ctx right_types right_values ->
+  term_environment_rel model ctx
     left_types right_types relations left_values right_values ->
   logical_relation model T left_types right_types relations
-    (fterm_sem model term left_types left_values)
-    (fterm_sem model term right_types right_values).
+    (fderiv_sem model term left_types left_values)
+    (fderiv_sem model term right_types right_values).
 Proof.
-  intros model context T term.
+  intros model ctx T term.
   induction term as
-      [context T variable
-       | context T U body IHbody
-       | context T U function IHfunction argument IHargument
-       | context T body IHbody
-       | context T function IHfunction U];
+      [ctx T variable
+       | ctx T U body IHbody
+       | ctx T U function IHfunction argument IHargument
+       | ctx T body IHbody
+       | ctx T function IHfunction U];
     intros left_types right_types relations left_values right_values
-      Hleft_context Hright_context Hrelated_context.
+      Hleft_ctx Hright_ctx Hrelated_ctx.
   - unfold logical_relation.
     repeat split.
     + now apply term_environment_sem_lookup with
-        (context := context) (variable := variable).
+        (ctx := ctx) (variable := variable).
     + now apply term_environment_sem_lookup with
-        (context := context) (variable := variable).
+        (ctx := ctx) (variable := variable).
     + now apply term_environment_rel_lookup with
-        (context := context) (variable := variable).
+        (ctx := ctx) (variable := variable).
   - unfold logical_relation.
     split.
-    + cbn [fterm_sem source_type_sem].
+    + cbn [fderiv_sem source_type_sem].
       intros argument Hargument.
       rewrite model_abstract_beta.
-      apply fterm_sem_typed.
+      apply fderiv_sem_typed.
       cbn [term_environment_sem env_extend env_tail].
       tauto.
     + split.
-      * cbn [fterm_sem source_type_sem].
+      * cbn [fderiv_sem source_type_sem].
         intros argument Hargument.
         rewrite model_abstract_beta.
-        apply fterm_sem_typed.
+        apply fderiv_sem_typed.
         cbn [term_environment_sem env_extend env_tail].
         tauto.
-      * cbn [fterm_sem source_type_rel].
+      * cbn [fderiv_sem source_type_rel].
         intros left_argument Hleft_argument
           right_argument Hright_argument Hargument_related.
         rewrite !model_abstract_beta.
@@ -997,11 +997,11 @@ Proof.
            tauto.
   - destruct (IHfunction left_types right_types relations
         left_values right_values
-        Hleft_context Hright_context Hrelated_context)
+        Hleft_ctx Hright_ctx Hrelated_ctx)
       as [Hleft_function [Hright_function Hrelated_function]].
     destruct (IHargument left_types right_types relations
         left_values right_values
-        Hleft_context Hright_context Hrelated_context)
+        Hleft_ctx Hright_ctx Hrelated_ctx)
       as [Hleft_argument [Hright_argument Hrelated_argument]].
     unfold logical_relation.
     repeat split.
@@ -1015,32 +1015,32 @@ Proof.
       * exact Hrelated_argument.
   - unfold logical_relation.
     split.
-    + cbn [fterm_sem source_type_sem].
+    + cbn [fderiv_sem source_type_sem].
       intros A.
       rewrite model_type_abstract_beta.
-      apply fterm_sem_typed.
+      apply fderiv_sem_typed.
       apply term_environment_sem_lift_zero.
-      exact Hleft_context.
+      exact Hleft_ctx.
     + split.
-      * cbn [fterm_sem source_type_sem].
+      * cbn [fderiv_sem source_type_sem].
         intros A.
         rewrite model_type_abstract_beta.
-        apply fterm_sem_typed.
+        apply fderiv_sem_typed.
         apply term_environment_sem_lift_zero.
-        exact Hright_context.
-      * cbn [fterm_sem source_type_rel].
+        exact Hright_ctx.
+      * cbn [fderiv_sem source_type_rel].
         intros left_type right_type relation Hbetween.
         rewrite !model_type_abstract_beta.
         apply IHbody.
         -- apply term_environment_sem_lift_zero.
-           exact Hleft_context.
+           exact Hleft_ctx.
         -- apply term_environment_sem_lift_zero.
-           exact Hright_context.
+           exact Hright_ctx.
         -- apply term_environment_rel_lift_zero.
-           exact Hrelated_context.
+           exact Hrelated_ctx.
   - destruct (IHfunction left_types right_types relations
         left_values right_values
-        Hleft_context Hright_context Hrelated_context)
+        Hleft_ctx Hright_ctx Hrelated_ctx)
       as [Hleft_function [Hright_function Hrelated_function]].
     set (left_replacement := source_type_sem model left_types U).
     set (right_replacement := source_type_sem model right_types U).
@@ -1052,10 +1052,10 @@ Proof.
           (env_extend right_replacement right_types)
           (env_extend replacement_relation relations)
           (model_type_apply model
-            (fterm_sem model function left_types left_values)
+            (fderiv_sem model function left_types left_values)
             left_replacement)
           (model_type_apply model
-            (fterm_sem model function right_types right_values)
+            (fderiv_sem model function right_types right_values)
             right_replacement)).
     { unfold logical_relation.
       repeat split.
@@ -1063,7 +1063,7 @@ Proof.
       - apply Hright_function.
       - apply Hrelated_function.
         apply logical_relation_between. }
-    cbn [fterm_sem].
+    cbn [fderiv_sem].
     apply (proj2
       (logical_relation_subst_correct model T 0
         left_types (env_extend left_replacement left_types)
@@ -1074,52 +1074,52 @@ Proof.
         (substituted_relation_environment_zero model relations
           replacement_relation)
         (model_type_apply model
-          (fterm_sem model function left_types left_values)
+          (fderiv_sem model function left_types left_values)
           left_replacement)
         (model_type_apply model
-          (fterm_sem model function right_types right_values)
+          (fderiv_sem model function right_types right_values)
           right_replacement))).
     exact Hbody.
 Qed.
 
-Corollary closed_fterm_parametricity : forall (model : ParametricModel)
-    T (term : fterm [] T) left_types right_types relations
+Corollary closed_fderiv_parametricity : forall (model : ParametricModel)
+    T (term : fderiv [] T) left_types right_types relations
     left_values right_values,
   logical_relation model T left_types right_types relations
-    (fterm_sem model term left_types left_values)
-    (fterm_sem model term right_types right_values).
+    (fderiv_sem model term left_types left_values)
+    (fderiv_sem model term right_types right_values).
 Proof.
   intros model T term left_types right_types relations
     left_values right_values.
-  apply fterm_parametricity; exact I.
+  apply fderiv_parametricity; exact I.
 Qed.
 
 (** A conventional, searchable name for the abstraction lemma. *)
 Corollary fundamental_theorem_of_parametricity :
   forall (model : ParametricModel)
-    context T (term : fterm context T)
+    ctx T (term : fderiv ctx T)
     left_types right_types relations left_values right_values,
-  term_environment_sem model context left_types left_values ->
-  term_environment_sem model context right_types right_values ->
-  term_environment_rel model context
+  term_environment_sem model ctx left_types left_values ->
+  term_environment_sem model ctx right_types right_values ->
+  term_environment_rel model ctx
     left_types right_types relations left_values right_values ->
   logical_relation model T left_types right_types relations
-    (fterm_sem model term left_types left_values)
-    (fterm_sem model term right_types right_values).
+    (fderiv_sem model term left_types left_values)
+    (fderiv_sem model term right_types right_values).
 Proof.
-  exact fterm_parametricity.
+  exact fderiv_parametricity.
 Qed.
 
 (** For a closed term interpreted at one outer type environment, the public
     generated formula is valid when its symbolic program denotes that term.
     The formula itself introduces the distinct endpoint types and relations
     at every source [forall]. *)
-Corollary closed_fterm_satisfies_relgen : forall
-    (model : ParametricModel) T (term : fterm [] T)
+Corollary closed_fderiv_satisfies_relgen : forall
+    (model : ParametricModel) T (term : fderiv [] T)
     formula_types types relations values term_values
     free_values free_relations,
   paired_type_environment formula_types types types ->
-  free_values 0 = fterm_sem model term types term_values ->
+  free_values 0 = fderiv_sem model term types term_values ->
   formula_sem model formula_types relations values
     free_values free_relations (relgen T).
 Proof.
@@ -1130,7 +1130,7 @@ Proof.
       values free_values free_relations Hpaired)).
   rewrite Hprogram.
   exact (proj2 (proj2
-    (closed_fterm_parametricity model T term
+    (closed_fderiv_parametricity model T term
       types types relations term_values term_values))).
 Qed.
 
@@ -1162,17 +1162,17 @@ Definition unit_parametric_model : ParametricModel :=
      model_type_abstract := fun _ => tt;
      model_type_abstract_beta := fun body A => unit_eta (body A) |}.
 
-Example unit_model_validates_relgen : forall T (term : fterm [] T)
+Example unit_model_validates_relgen : forall T (term : fderiv [] T)
     formula_types types relations values term_values
     free_values free_relations,
   paired_type_environment formula_types types types ->
-  free_values 0 = fterm_sem unit_parametric_model term types term_values ->
+  free_values 0 = fderiv_sem unit_parametric_model term types term_values ->
   formula_sem unit_parametric_model formula_types relations values
     free_values free_relations (relgen T).
 Proof.
   intros T term formula_types types relations values term_values
     free_values free_relations Hpaired Hprogram.
-  exact (closed_fterm_satisfies_relgen unit_parametric_model T term
+  exact (closed_fderiv_satisfies_relgen unit_parametric_model T term
     formula_types types relations values term_values
     free_values free_relations Hpaired Hprogram).
 Qed.

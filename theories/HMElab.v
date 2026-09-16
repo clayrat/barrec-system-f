@@ -20,12 +20,12 @@ From Stdlib Require Import List Lia PeanoNat.
 Import ListNotations.
 
 From SystemF.F Require Import Syntax OPE Scope TypeSubstitution Check.
-From SystemF.F Require Export RawTyping.
+From SystemF.F Require Export Typing.
 From SystemF.FreeTheorems Require Import Formula Generate.
 From SystemF.HM Require Import ElabScope Erasure Infer.
 From SystemF.HM Require Export ElabSemantics.
-From SystemF.HM.WInCoq Require Import Gen Schemes Subst SubstSchm.
-From SystemF.HM.WInCoq Require Import Context Disjoints ListIds.
+From SystemF.HM.W Require Import Gen Schemes Subst SubstSchm.
+From SystemF.HM.W Require Import Context Disjoints ListIds.
 
 
 (** [free_variables_scoped depth resolve sigma] says that every [sc_var]
@@ -189,14 +189,14 @@ Qed.
 (** ** Public checked and executable W entry points *)
 
 Definition infer_systemf_type_checked
-    (constants : ConstantInterpretation) (expression : term) : option type :=
+    (constants : ConstantInterpretation) (expression : hmterm) : option type :=
   match runW expression [] with
   | inl (tau, _) => Some (hm_principal_type constants tau)
   | inr _ => None
   end.
 
 Definition infer_systemf_type_exec
-    (constants : ConstantInterpretation) (expression : term) : option type :=
+    (constants : ConstantInterpretation) (expression : hmterm) : option type :=
   match runW_exec expression [] with
   | inferred tau _ => Some (hm_principal_type constants tau)
   | inference_rejected => None
@@ -254,7 +254,7 @@ Definition BridgedType : Type :=
 Definition infer_systemf_type
     (constants : ConstantInterpretation)
     (Hconstants : constants_closed constants)
-    (expression : term) : option BridgedType :=
+    (expression : hmterm) : option BridgedType :=
   match runW_exec expression [] with
   | inferred tau _ =>
       Some (exist _ (hm_principal_type constants tau)
@@ -264,7 +264,7 @@ Definition infer_systemf_type
 
 Definition infer_relational_formula_exec
     (constants : ConstantInterpretation)
-    (expression : term) : option RelFormula :=
+    (expression : hmterm) : option RelFormula :=
   match infer_systemf_type_exec constants expression with
   | Some T => Some (relgen T)
   | None => None
@@ -305,36 +305,36 @@ Inductive WChurchError : Set :=
 
 (** Explicit type applications are left-associated in instantiation order. *)
 Fixpoint apply_type_arguments
-    (function : RawChurch) (arguments : list type) : RawChurch :=
+    (function : fterm) (arguments : list type) : fterm :=
   match arguments with
   | [] => function
   | argument :: arguments' =>
-      apply_type_arguments (RCTApp function argument) arguments'
+      apply_type_arguments (FTApp function argument) arguments'
   end.
 
 (** [generalized] is in first-occurrence (outermost-first) order. *)
 Fixpoint wrap_type_abstractions
-    (generalized : list id) (body : RawChurch) : RawChurch :=
+    (generalized : list id) (body : fterm) : fterm :=
   match generalized with
   | [] => body
   | _ :: generalized' =>
-      RCTAbs (wrap_type_abstractions generalized' body)
+      FTLam (wrap_type_abstractions generalized' body)
   end.
 
 
 Definition types_closed (depth : nat) (types : list type) : Prop :=
   forall T, In T types -> closed depth T.
 
-Lemma raw_typing_apply_type_arguments : forall
-    depth context raw arguments body,
+Lemma typing_apply_type_arguments : forall
+    depth ctx raw arguments body,
   types_closed depth arguments ->
-  RawTyping depth context raw
+  Typing depth ctx raw
     (quantify_type (length arguments) body) ->
-  RawTyping depth context (apply_type_arguments raw arguments)
+  Typing depth ctx (apply_type_arguments raw arguments)
     (instantiate_type
       (quantify_type (length arguments) body) arguments).
 Proof.
-  intros depth context raw arguments.
+  intros depth ctx raw arguments.
   revert raw.
   induction arguments as [| argument arguments IH];
     intros raw body Harguments Htyping.
@@ -358,28 +358,28 @@ Proof.
     apply IH with (body := body').
     + exact Hrest.
     + rewrite <- Htype.
-      now apply RawTypingTApp.
+      now apply TypingTApp.
 Qed.
 
-Lemma raw_typing_wrap_type_abstractions : forall
-    generalized depth context body T,
-  RawTyping (length generalized + depth)
-    (lift_type_context_by (length generalized) context) body T ->
-  RawTyping depth context
+Lemma typing_wrap_type_abstractions : forall
+    generalized depth ctx body T,
+  Typing (length generalized + depth)
+    (lift_type_ctx_by (length generalized) ctx) body T ->
+  Typing depth ctx
     (wrap_type_abstractions generalized body)
     (quantify_type (length generalized) T).
 Proof.
   induction generalized as [| variable generalized IH];
-    intros depth context body T Htyping.
+    intros depth ctx body T Htyping.
   - cbn [length wrap_type_abstractions quantify_type] in Htyping |- *.
-    rewrite lift_type_context_by_zero in Htyping.
+    rewrite lift_type_ctx_by_zero in Htyping.
     exact Htyping.
   - cbn [length wrap_type_abstractions quantify_type].
-    apply RawTypingTAbs.
+    apply TypingTLam.
     apply IH.
     replace (length generalized + S depth)
       with (S (length generalized + depth)) by lia.
-    rewrite lift_type_context_by_after_lift.
+    rewrite lift_type_ctx_by_after_lift.
     exact Htyping.
 Qed.
 
@@ -411,14 +411,14 @@ Fixpoint reify_w_elab_tree_semantic
     (constants : ConstantInterpretation)
     (valuation : TypeValuation)
     (term_variables : list id)
-    (tree : WElabTree) : Result ChurchReifyError RawChurch :=
+    (tree : WElabTree) : Result ChurchReifyError fterm :=
   match tree with
   | elab_variable variable _ instantiation _ =>
       match lookup_binder variable term_variables with
       | None => Err (reify_unbound_term_variable variable)
       | Some index =>
           Ok
-            (apply_type_arguments (RCVar index)
+            (apply_type_arguments (FVar index)
               (denote_instantiation constants valuation instantiation))
       end
   | elab_lambda variable _ parameter body =>
@@ -427,14 +427,14 @@ Fixpoint reify_w_elab_tree_semantic
       | Err error => Err error
       | Ok body' =>
           Ok
-            (RCAbs (denote_monotype constants valuation parameter) body')
+            (FLam (denote_monotype constants valuation parameter) body')
       end
   | elab_application function argument _ _ _ unifier _ =>
       let argument_valuation :=
         valuation_after_substitution constants unifier valuation in
       let function_valuation :=
         valuation_after_substitution constants
-          (compose_subst (w_elab_tree_substitution argument) unifier)
+          (comp_subst (w_elab_tree_substitution argument) unifier)
           valuation in
       match reify_w_elab_tree_semantic constants function_valuation
           term_variables function with
@@ -443,7 +443,7 @@ Fixpoint reify_w_elab_tree_semantic
           match reify_w_elab_tree_semantic constants argument_valuation
               term_variables argument with
           | Err error => Err error
-          | Ok argument' => Ok (RCApp function' argument')
+          | Ok argument' => Ok (FApp function' argument')
           end
       end
   | elab_let variable _ generalized sigma bound body =>
@@ -461,8 +461,8 @@ Fixpoint reify_w_elab_tree_semantic
           | Err error => Err error
           | Ok body' =>
               Ok
-                (RCApp
-                  (RCAbs annotation body')
+                (FApp
+                  (FLam annotation body')
                   (wrap_type_abstractions generalized bound'))
           end
       end
@@ -522,11 +522,11 @@ Theorem W_elab_semantic_type_preservation : forall
   valuation_scoped depth valuation ->
   W_elab expression environment state =
     w_elab_state_success tau substitution state' tree ->
-  { raw : RawChurch &
+  { raw : fterm &
     (reify_w_elab_tree_semantic constants valuation
       (map fst environment) tree = Ok raw) *
-    RawTyping depth
-      (denote_context constants
+    Typing depth
+      (denote_ctx constants
         (valuation_after_substitution constants substitution valuation)
         environment)
       raw (denote_monotype constants valuation tau) }%type.
@@ -547,7 +547,7 @@ Proof.
     destruct (apply_inst_subst instantiation sigma)
       as [instance |] eqn:Hinstance; try discriminate.
     inversion Hrun; subst tau substitution state' tree.
-    destruct (lookup_binder_denote_context_sig
+    destruct (lookup_binder_denote_ctx_sig
       constants valuation environment variable sigma Hlookup)
       as [index [Hbinder Hindex]].
     assert (Hlength : length instantiation = max_gen_vars sigma).
@@ -559,17 +559,17 @@ Proof.
     { rewrite denote_instantiation_is_map, map_length.
       exact Hlength. }
     exists
-      (apply_type_arguments (RCVar index)
+      (apply_type_arguments (FVar index)
         (denote_instantiation constants valuation instantiation)).
     split.
     + cbn [reify_w_elab_tree_semantic].
       now rewrite Hbinder.
     + replace
-        (denote_context constants
+        (denote_ctx constants
           (valuation_after_substitution constants [] valuation) environment)
-        with (denote_context constants valuation environment).
+        with (denote_ctx constants valuation environment).
       2: {
-        apply denote_context_valuation_ext.
+        apply denote_ctx_valuation_ext.
         intro meta.
         unfold valuation_after_substitution.
         now rewrite apply_subst_nil. }
@@ -579,14 +579,14 @@ Proof.
       rewrite <- denote_instantiation_is_map.
       unfold denote_scheme.
       rewrite <- Hdenotation_length.
-      apply raw_typing_apply_type_arguments.
+      apply typing_apply_type_arguments.
       * intros T HT.
         rewrite denote_instantiation_is_map in HT.
         apply in_map_iff in HT.
         destruct HT as [argument [HT Hargument]].
         subst T.
         now apply denote_monotype_scoped.
-      * apply RawTypingVar.
+      * apply TypingVar.
         unfold denote_scheme in Hindex.
         rewrite <- Hdenotation_length in Hindex.
         exact Hindex.
@@ -615,12 +615,12 @@ Proof.
     assert (Hfunction_valuation :
       valuation_scoped depth
         (valuation_after_substitution constants
-          (compose_subst argument_substitution unifier) valuation)).
+          (comp_subst argument_substitution unifier) valuation)).
     { now apply valuation_after_substitution_scoped. }
     destruct (IHfunction environment state function_type
       function_substitution function_state function_tree constants
       (valuation_after_substitution constants
-        (compose_subst argument_substitution unifier) valuation)
+        (comp_subst argument_substitution unifier) valuation)
       depth Hconstants Hfunction_valuation Hfunction)
       as [function_raw [Hfunction_reification Hfunction_typing]].
     assert (Hargument_valuation :
@@ -635,59 +635,59 @@ Proof.
       depth Hconstants Hargument_valuation Hargument)
       as [argument_raw [Hargument_reification Hargument_typing]].
     rewrite apply_subst_ctx_names in Hargument_reification.
-    exists (RCApp function_raw argument_raw).
+    exists (FApp function_raw argument_raw).
     split.
     + cbn [reify_w_elab_tree_semantic].
       rewrite Hargument_substitution.
       now rewrite Hfunction_reification, Hargument_reification.
-    + assert (Hfunction_context :
-        denote_context constants
+    + assert (Hfunction_ctx :
+        denote_ctx constants
           (valuation_after_substitution constants function_substitution
             (valuation_after_substitution constants
-              (compose_subst argument_substitution unifier) valuation))
+              (comp_subst argument_substitution unifier) valuation))
           environment =
-        denote_context constants
+        denote_ctx constants
           (valuation_after_substitution constants
-            (compose_subst function_substitution
-              (compose_subst argument_substitution unifier)) valuation)
+            (comp_subst function_substitution
+              (comp_subst argument_substitution unifier)) valuation)
           environment).
       { symmetry.
-        apply denote_context_after_compose. }
-      rewrite Hfunction_context in Hfunction_typing.
-      assert (Hargument_context :
-        denote_context constants
+        apply denote_ctx_after_compose. }
+      rewrite Hfunction_ctx in Hfunction_typing.
+      assert (Hargument_ctx :
+        denote_ctx constants
           (valuation_after_substitution constants argument_substitution
             (valuation_after_substitution constants unifier valuation))
           (apply_subst_ctx function_substitution environment) =
-        denote_context constants
+        denote_ctx constants
           (valuation_after_substitution constants
-            (compose_subst function_substitution
-              (compose_subst argument_substitution unifier)) valuation)
+            (comp_subst function_substitution
+              (comp_subst argument_substitution unifier)) valuation)
           environment).
       { transitivity
-          (denote_context constants
+          (denote_ctx constants
             (valuation_after_substitution constants
-              (compose_subst argument_substitution unifier) valuation)
+              (comp_subst argument_substitution unifier) valuation)
             (apply_subst_ctx function_substitution environment)).
-        - symmetry. apply denote_context_after_compose.
+        - symmetry. apply denote_ctx_after_compose.
         - transitivity
-            (denote_context constants
+            (denote_ctx constants
               (valuation_after_substitution constants function_substitution
                 (valuation_after_substitution constants
-                  (compose_subst argument_substitution unifier) valuation))
+                  (comp_subst argument_substitution unifier) valuation))
               environment).
           + symmetry.
-            now apply denote_context_after_substitution.
+            now apply denote_ctx_after_substitution.
           + symmetry.
-            apply denote_context_after_compose. }
-      rewrite Hargument_context in Hargument_typing.
+            apply denote_ctx_after_compose. }
+      rewrite Hargument_ctx in Hargument_typing.
       assert (Hunifier : is_unifier left right unifier).
       { now apply unify_exec_success_sound. }
       unfold is_unifier in Hunifier.
       assert (Hfunction_type :
         denote_monotype constants
           (valuation_after_substitution constants
-            (compose_subst argument_substitution unifier) valuation)
+            (comp_subst argument_substitution unifier) valuation)
           function_type =
         TArrow
           (denote_monotype constants
@@ -701,7 +701,7 @@ Proof.
         cbn [apply_subst denote_monotype].
         now rewrite denote_monotype_after_substitution. }
       rewrite Hfunction_type in Hfunction_typing.
-      now apply RawTypingApp with
+      now apply TypingApp with
         (A := denote_monotype constants
           (valuation_after_substitution constants unifier valuation)
           argument_type).
@@ -755,8 +755,8 @@ Proof.
     cbn [map fst] in Hbody_reification.
     rewrite apply_subst_ctx_names in Hbody_reification.
     exists
-      (RCApp
-        (RCAbs
+      (FApp
+        (FLam
           (denote_scheme constants
             (valuation_after_substitution constants body_substitution
               valuation) sigma)
@@ -766,55 +766,55 @@ Proof.
     + cbn [reify_w_elab_tree_semantic].
       rewrite Hbody_substitution.
       now rewrite Hbound_reification, Hbody_reification.
-    + assert (Hbody_context :
-        denote_context constants
+    + assert (Hbody_ctx :
+        denote_ctx constants
           (valuation_after_substitution constants body_substitution valuation)
           (apply_subst_ctx bound_substitution environment) =
-        denote_context constants
+        denote_ctx constants
           (valuation_after_substitution constants
-            (compose_subst bound_substitution body_substitution) valuation)
+            (comp_subst bound_substitution body_substitution) valuation)
           environment).
       { transitivity
-          (denote_context constants
+          (denote_ctx constants
             (valuation_after_substitution constants bound_substitution
               (valuation_after_substitution constants body_substitution
                 valuation)) environment).
         - symmetry.
-          now apply denote_context_after_substitution.
+          now apply denote_ctx_after_substitution.
         - symmetry.
-          apply denote_context_after_compose. }
-      cbn [denote_context] in Hbody_typing.
-      rewrite Hbody_context in Hbody_typing.
+          apply denote_ctx_after_compose. }
+      cbn [denote_ctx] in Hbody_typing.
+      rewrite Hbody_ctx in Hbody_typing.
       assert (Hgeneralization_disjoint :
         are_disjoints
           (FV_ctx (apply_subst_ctx bound_substitution environment))
           generalized).
       { now apply generalize_for_elaboration_disjoint with
           (tau := bound_type) (sigma := sigma). }
-      assert (Hbound_context :
-        denote_context constants
+      assert (Hbound_ctx :
+        denote_ctx constants
           (valuation_after_substitution constants bound_substitution
             (generalized_valuation generalized
               (valuation_after_substitution constants body_substitution
                 valuation))) environment =
-        lift_type_context_by (length generalized)
-          (denote_context constants
+        lift_type_ctx_by (length generalized)
+          (denote_ctx constants
             (valuation_after_substitution constants
-              (compose_subst bound_substitution body_substitution) valuation)
+              (comp_subst bound_substitution body_substitution) valuation)
             environment)).
       { transitivity
-          (denote_context constants
+          (denote_ctx constants
             (generalized_valuation generalized
               (valuation_after_substitution constants body_substitution
                 valuation))
             (apply_subst_ctx bound_substitution environment)).
-        - now apply denote_context_after_substitution.
-        - rewrite (denote_context_generalized constants
+        - now apply denote_ctx_after_substitution.
+        - rewrite (denote_ctx_generalized constants
             (valuation_after_substitution constants body_substitution valuation)
             (apply_subst_ctx bound_substitution environment) generalized
             Hconstants Hgeneralization_disjoint).
-          now rewrite Hbody_context. }
-      rewrite Hbound_context in Hbound_typing.
+          now rewrite Hbody_ctx. }
+      rewrite Hbound_ctx in Hbound_typing.
       rewrite (generalize_for_elaboration_denotation
         bound_type (apply_subst_ctx bound_substitution environment)
         sigma generalized constants
@@ -826,10 +826,10 @@ Proof.
           (tau := bound_type)
           (environment := apply_subst_ctx bound_substitution environment). }
       assert (Hbound_polymorphic :
-        RawTyping depth
-          (denote_context constants
+        Typing depth
+          (denote_ctx constants
             (valuation_after_substitution constants
-              (compose_subst bound_substitution body_substitution) valuation)
+              (comp_subst bound_substitution body_substitution) valuation)
             environment)
           (wrap_type_abstractions generalized bound_raw)
           (denote_scheme constants
@@ -837,12 +837,12 @@ Proof.
             sigma)).
       { unfold denote_scheme.
         rewrite <- Hgeneralization_length.
-        now apply raw_typing_wrap_type_abstractions. }
-      apply RawTypingApp with
+        now apply typing_wrap_type_abstractions. }
+      apply TypingApp with
         (A := denote_scheme constants
           (valuation_after_substitution constants body_substitution valuation)
           sigma).
-      * apply RawTypingAbs.
+      * apply TypingLam.
         -- apply denote_scheme_scoped.
            ++ exact Hconstants.
            ++ exact Hbody_valuation.
@@ -863,16 +863,16 @@ Proof.
       as [body_raw [Hbody_reification Hbody_typing]].
     cbn [map fst] in Hbody_reification.
     exists
-      (RCAbs
+      (FLam
         (denote_monotype constants valuation
           (apply_subst body_substitution (var state)))
         body_raw).
     split.
     + cbn [reify_w_elab_tree_semantic].
       now rewrite Hbody_reification.
-    + apply RawTypingAbs.
+    + apply TypingLam.
       * now apply denote_monotype_scoped.
-      * cbn [denote_context] in Hbody_typing.
+      * cbn [denote_ctx] in Hbody_typing.
         unfold denote_scheme in Hbody_typing.
         cbn [ty_to_schm max_gen_vars quantify_type denote_scheme_body]
           in Hbody_typing.
@@ -887,11 +887,11 @@ Corollary runW_elab_semantic_type_preservation : forall
   constants_closed constants ->
   valuation_scoped depth valuation ->
   runW_elab expression environment = elaborated tau substitution tree ->
-  { raw : RawChurch &
+  { raw : fterm &
     (reify_w_elab_tree_semantic constants valuation
       (map fst environment) tree = Ok raw) *
-    RawTyping depth
-      (denote_context constants
+    Typing depth
+      (denote_ctx constants
         (valuation_after_substitution constants substitution valuation)
         environment)
       raw (denote_monotype constants valuation tau) }%type.
@@ -1065,12 +1065,12 @@ Proof.
 Qed.
 
 
-Record RawChurchElaboration : Type := {
-  raw_church_hm_type : ty;
-  raw_church_substitution : substitution;
-  raw_church_tree : WElabTree;
-  raw_church_systemf_type : type;
-  raw_church_term : RawChurch
+Record ChurchElaboration : Type := {
+  church_hm_type : ty;
+  church_substitution : substitution;
+  church_tree : WElabTree;
+  church_systemf_type : type;
+  church_term : fterm
 }.
 
 Lemma runW_elab_success_erases : forall expression tau substitution tree,
@@ -1096,8 +1096,8 @@ Qed.
     type-safety boundary. *)
 Definition runWChurch_unchecked
     (constants : ConstantInterpretation)
-    (expression : term)
-    : Result WChurchError RawChurchElaboration :=
+    (expression : hmterm)
+    : Result WChurchError ChurchElaboration :=
   match runW_elab expression [] with
   | elaboration_rejected failure =>
       Err (church_inference_failure failure)
@@ -1110,12 +1110,12 @@ Definition runWChurch_unchecked
       | Err error => Err (church_reification_failure error)
       | Ok body =>
           Ok
-            {| raw_church_hm_type := tau;
-               raw_church_substitution := final_substitution;
-               raw_church_tree := tree;
-               raw_church_systemf_type :=
+            {| church_hm_type := tau;
+               church_substitution := final_substitution;
+               church_tree := tree;
+               church_systemf_type :=
                  hm_principal_type constants tau;
-               raw_church_term :=
+               church_term :=
                  wrap_type_abstractions generalized body |}
       end
   end.
@@ -1141,7 +1141,7 @@ Proof.
   - destruct (lookup_binder variable term_variables)
       as [index |] eqn:Hlookup; try discriminate.
     exists
-      (apply_type_arguments (RCVar index)
+      (apply_type_arguments (FVar index)
         (denote_instantiation constants valuation instantiation)).
     cbn [reify_w_elab_tree_semantic].
     now rewrite Hlookup.
@@ -1150,7 +1150,7 @@ Proof.
       eqn:Herase_body; try discriminate.
     destruct (IHbody constants valuation (variable :: term_variables)
       body_erased Herase_body) as [body' Hbody].
-    exists (RCAbs (denote_monotype constants valuation parameter) body').
+    exists (FLam (denote_monotype constants valuation parameter) body').
     cbn [reify_w_elab_tree_semantic].
     now rewrite Hbody.
   - destruct (erase_hm term_variables (w_elab_tree_source function))
@@ -1159,7 +1159,7 @@ Proof.
       as [argument_erased |] eqn:Herase_argument; try discriminate.
     destruct (IHfunction constants
       (valuation_after_substitution constants
-        (compose_subst (w_elab_tree_substitution argument) unifier)
+        (comp_subst (w_elab_tree_substitution argument) unifier)
         valuation)
       term_variables function_erased Herase_function)
       as [function' Hfunction].
@@ -1167,7 +1167,7 @@ Proof.
       (valuation_after_substitution constants unifier valuation)
       term_variables argument_erased Herase_argument)
       as [argument' Hargument].
-    exists (RCApp function' argument').
+    exists (FApp function' argument').
     cbn [reify_w_elab_tree_semantic].
     now rewrite Hfunction, Hargument.
   - destruct (erase_hm term_variables (w_elab_tree_source bound))
@@ -1183,8 +1183,8 @@ Proof.
     destruct (IHbody constants valuation (variable :: term_variables)
       body_erased Herase_body) as [body' Hbody].
     exists
-      (RCApp
-        (RCAbs (denote_scheme constants body_valuation sigma) body')
+      (FApp
+        (FLam (denote_scheme constants body_valuation sigma) body')
         (wrap_type_abstractions generalized bound')).
     cbn [reify_w_elab_tree_semantic].
     fold body_valuation.
@@ -1228,8 +1228,8 @@ Theorem runWChurch_unchecked_type_preservation : forall
     constants expression elaboration,
   constants_closed constants ->
   runWChurch_unchecked constants expression = Ok elaboration ->
-  RawTyping 0 [] (raw_church_term elaboration)
-    (hm_principal_type constants (raw_church_hm_type elaboration)).
+  Typing 0 [] (church_term elaboration)
+    (hm_principal_type constants (church_hm_type elaboration)).
 Proof.
   intros constants expression elaboration Hconstants Hchurch.
   unfold runWChurch_unchecked in Hchurch.
@@ -1260,17 +1260,17 @@ Proof.
   - cbn [map fst] in Hsemantic_reification.
     rewrite Hreification in Hsemantic_reification.
     inversion Hsemantic_reification; subst semantic_body.
-    cbn [denote_context raw_church_term raw_church_hm_type]
+    cbn [denote_ctx church_term church_hm_type]
       in Hsemantic_typing |- *.
     replace (length generalized) with (length generalized + 0)
       in Hsemantic_typing by lia.
     change
-      (RawTyping (length generalized + 0)
-        (lift_type_context_by (length generalized) []) body
+      (Typing (length generalized + 0)
+        (lift_type_ctx_by (length generalized) []) body
         (denote_monotype constants
           (generalized_valuation generalized reification_default_valuation)
           tau)) in Hsemantic_typing.
-    pose proof (raw_typing_wrap_type_abstractions
+    pose proof (typing_wrap_type_abstractions
       generalized 0 [] body
       (denote_monotype constants
         (generalized_valuation generalized reification_default_valuation)
@@ -1293,13 +1293,13 @@ Theorem runWChurch_unchecked_checkClosed_principal : forall
     constants expression elaboration,
   constants_closed constants ->
   runWChurch_unchecked constants expression = Ok elaboration ->
-  exists checked : Checked 0 [] (raw_church_term elaboration),
-    checkClosed (raw_church_term elaboration) = Ok checked /\
+  exists checked : Checked 0 [] (church_term elaboration),
+    checkClosed (church_term elaboration) = Ok checked /\
     projT1 checked =
-      hm_principal_type constants (raw_church_hm_type elaboration).
+      hm_principal_type constants (church_hm_type elaboration).
 Proof.
   intros constants expression elaboration Hconstants Hchurch.
-  apply raw_typing_checkClosed.
+  apply typing_checkClosed.
   exact (runWChurch_unchecked_type_preservation
     constants expression elaboration Hconstants Hchurch).
 Qed.
@@ -1308,14 +1308,14 @@ Corollary runWChurch_unchecked_scoped : forall
     constants expression elaboration,
   constants_closed constants ->
   runWChurch_unchecked constants expression = Ok elaboration ->
-  scoped 0 (raw_church_term elaboration).
+  scoped 0 (church_term elaboration).
 Proof.
   intros constants expression elaboration Hconstants Hchurch.
   pose proof (runWChurch_unchecked_type_preservation
     constants expression elaboration Hconstants Hchurch) as Htyping.
-  destruct (raw_typing_scope_and_type 0 []
-    (raw_church_term elaboration)
-    (hm_principal_type constants (raw_church_hm_type elaboration))
+  destruct (typing_scope_and_type 0 []
+    (church_term elaboration)
+    (hm_principal_type constants (church_hm_type elaboration))
     Htyping (Forall_nil _)) as [_ Hscoped].
   exact Hscoped.
 Qed.
@@ -1343,26 +1343,26 @@ Proof.
 Qed.
 
 Record CheckedChurchElaboration : Type := {
-  checked_church_elaboration : RawChurchElaboration;
+  checked_church_elaboration : ChurchElaboration;
   checked_church_certificate :
-    Checked 0 [] (raw_church_term checked_church_elaboration);
+    Checked 0 [] (church_term checked_church_elaboration);
   checked_church_type :
     projT1 checked_church_certificate =
-    raw_church_systemf_type checked_church_elaboration
+    church_systemf_type checked_church_elaboration
 }.
 
-(** Retain the intrinsic [fterm] built by [checkClosed], rather than merely
+(** Retain the intrinsic [fderiv] built by [checkClosed], rather than merely
     using the checker as a Boolean guard.  The equality proof is erased by
     extraction; the checked type and intrinsic term remain available to the
     evaluator and the later bound bridge. *)
-Definition certify_raw_church_elaboration
-    (elaboration : RawChurchElaboration)
+Definition certify_church_elaboration
+    (elaboration : ChurchElaboration)
     : Result WChurchError CheckedChurchElaboration :=
-  match checkClosed (raw_church_term elaboration) with
+  match checkClosed (church_term elaboration) with
   | Err error => Err (church_checker_failure error)
   | Ok checked =>
       let inferred_type := projT1 checked in
-      let expected_type := raw_church_systemf_type elaboration in
+      let expected_type := church_systemf_type elaboration in
       match type_eq_dec inferred_type expected_type with
       | left equality =>
           Ok
@@ -1378,26 +1378,26 @@ Definition certify_raw_church_elaboration
 
 Definition erase_checked_church_result
     (result : Result WChurchError CheckedChurchElaboration)
-    : Result WChurchError RawChurchElaboration :=
+    : Result WChurchError ChurchElaboration :=
   match result with
   | Ok checked => Ok (checked_church_elaboration checked)
   | Err error => Err error
   end.
 
-Definition validate_raw_church_elaboration
-    (elaboration : RawChurchElaboration)
-    : Result WChurchError RawChurchElaboration :=
+Definition validate_church_elaboration
+    (elaboration : ChurchElaboration)
+    : Result WChurchError ChurchElaboration :=
   erase_checked_church_result
-    (certify_raw_church_elaboration elaboration).
+    (certify_church_elaboration elaboration).
 
 (** Proof-carrying closed bridge used by downstream consumers. *)
 Definition runWChurchChecked
     (constants : ConstantInterpretation)
-    (expression : term)
+    (expression : hmterm)
     : Result WChurchError CheckedChurchElaboration :=
   match runWChurch_unchecked constants expression with
   | Err error => Err error
-  | Ok elaboration => certify_raw_church_elaboration elaboration
+  | Ok elaboration => certify_church_elaboration elaboration
   end.
 
 (** Public raw projection.  Its successful branch has passed both structural
@@ -1405,8 +1405,8 @@ Definition runWChurchChecked
     exposes the retained certificate when an intrinsic term is needed. *)
 Definition runWChurch
     (constants : ConstantInterpretation)
-    (expression : term)
-    : Result WChurchError RawChurchElaboration :=
+    (expression : hmterm)
+    : Result WChurchError ChurchElaboration :=
   erase_checked_church_result
     (runWChurchChecked constants expression).
 
@@ -1417,21 +1417,21 @@ Proof. reflexivity. Qed.
 
 (** ** Type correspondence of the W-to-Church bridge *)
 
-Lemma validate_raw_church_elaboration_success : forall elaboration result,
-  validate_raw_church_elaboration elaboration = Ok result ->
+Lemma validate_church_elaboration_success : forall elaboration result,
+  validate_church_elaboration elaboration = Ok result ->
   result = elaboration /\
-  exists checked : Checked 0 [] (raw_church_term elaboration),
-    checkClosed (raw_church_term elaboration) = Ok checked /\
-    projT1 checked = raw_church_systemf_type elaboration.
+  exists checked : Checked 0 [] (church_term elaboration),
+    checkClosed (church_term elaboration) = Ok checked /\
+    projT1 checked = church_systemf_type elaboration.
 Proof.
   intros elaboration result Hvalidate.
-  unfold validate_raw_church_elaboration,
-    certify_raw_church_elaboration,
+  unfold validate_church_elaboration,
+    certify_church_elaboration,
     erase_checked_church_result in Hvalidate.
-  destruct (checkClosed (raw_church_term elaboration))
+  destruct (checkClosed (church_term elaboration))
     as [checked | error] eqn:Hcheck; try discriminate.
   destruct (type_eq_dec
-      (projT1 checked) (raw_church_systemf_type elaboration))
+      (projT1 checked) (church_systemf_type elaboration))
     as [Hequal | Hunequal]; try discriminate.
   inversion Hvalidate; subst result.
   split.
@@ -1445,10 +1445,10 @@ Theorem runWChurch_unchecked_W_contract : forall
   runWChurch_unchecked constants expression = Ok elaboration ->
   runW_exec expression [] =
     inferred
-      (raw_church_hm_type elaboration)
-      (raw_church_substitution elaboration) /\
-  raw_church_systemf_type elaboration =
-    hm_principal_type constants (raw_church_hm_type elaboration).
+      (church_hm_type elaboration)
+      (church_substitution elaboration) /\
+  church_systemf_type elaboration =
+    hm_principal_type constants (church_hm_type elaboration).
 Proof.
   intros constants expression elaboration Hchurch.
   unfold runWChurch_unchecked in Hchurch.
@@ -1497,10 +1497,10 @@ Proof.
     as [_ Helaboration_type].
   unfold runWChurch, runWChurchChecked.
   rewrite Hunchecked.
-  unfold certify_raw_church_elaboration, erase_checked_church_result.
+  unfold certify_church_elaboration, erase_checked_church_result.
   rewrite Hcheck.
   destruct (type_eq_dec
-    (projT1 checked) (raw_church_systemf_type elaboration))
+    (projT1 checked) (church_systemf_type elaboration))
     as [Hequal | Hunequal].
   - exists elaboration.
     reflexivity.
@@ -1515,7 +1515,7 @@ Corollary runWChurch_unchecked_infer_type : forall
     constants expression elaboration,
   runWChurch_unchecked constants expression = Ok elaboration ->
   infer_systemf_type_exec constants expression =
-  Some (raw_church_systemf_type elaboration).
+  Some (church_systemf_type elaboration).
 Proof.
   intros constants expression elaboration Hchurch.
   destruct (runWChurch_unchecked_W_contract
@@ -1534,12 +1534,12 @@ Proof.
   unfold runWChurch, runWChurchChecked in Hchurch.
   destruct (runWChurch_unchecked constants expression)
     as [built | error] eqn:Hbuilt; try discriminate.
-  unfold certify_raw_church_elaboration,
+  unfold certify_church_elaboration,
     erase_checked_church_result in Hchurch.
-  destruct (checkClosed (raw_church_term built))
+  destruct (checkClosed (church_term built))
     as [checked | type_error] eqn:Hcheck; try discriminate.
   destruct (type_eq_dec
-      (projT1 checked) (raw_church_systemf_type built))
+      (projT1 checked) (church_systemf_type built))
     as [Hequal | Hunequal]; try discriminate.
   inversion Hchurch; subst elaboration.
   reflexivity.
@@ -1572,10 +1572,10 @@ Corollary runWChurch_W_contract : forall constants expression elaboration,
   runWChurch constants expression = Ok elaboration ->
   runW_exec expression [] =
     inferred
-      (raw_church_hm_type elaboration)
-      (raw_church_substitution elaboration) /\
-  raw_church_systemf_type elaboration =
-    hm_principal_type constants (raw_church_hm_type elaboration).
+      (church_hm_type elaboration)
+      (church_substitution elaboration) /\
+  church_systemf_type elaboration =
+    hm_principal_type constants (church_hm_type elaboration).
 Proof.
   intros constants expression elaboration Hchurch.
   apply runWChurch_unchecked_W_contract.
@@ -1586,21 +1586,21 @@ Qed.
     exactly the principal System F type obtained from executable W. *)
 Theorem runWChurch_type_bridge : forall constants expression elaboration,
   runWChurch constants expression = Ok elaboration ->
-  exists checked : Checked 0 [] (raw_church_term elaboration),
-    checkClosed (raw_church_term elaboration) = Ok checked /\
-    projT1 checked = raw_church_systemf_type elaboration /\
+  exists checked : Checked 0 [] (church_term elaboration),
+    checkClosed (church_term elaboration) = Ok checked /\
+    projT1 checked = church_systemf_type elaboration /\
     infer_systemf_type_exec constants expression =
-      Some (raw_church_systemf_type elaboration).
+      Some (church_systemf_type elaboration).
 Proof.
   intros constants expression elaboration Hchurch.
   pose proof Hchurch as Hunchecked.
   apply runWChurch_success_unchecked in Hunchecked.
   assert (Hvalidate :
-    validate_raw_church_elaboration elaboration = Ok elaboration).
+    validate_church_elaboration elaboration = Ok elaboration).
   { unfold runWChurch, runWChurchChecked in Hchurch.
     rewrite Hunchecked in Hchurch.
     exact Hchurch. }
-  apply validate_raw_church_elaboration_success in Hvalidate.
+  apply validate_church_elaboration_success in Hvalidate.
   destruct Hvalidate as [_ [checked [Hcheck Htype]]].
   exists checked.
   split; [exact Hcheck |].
@@ -1610,8 +1610,8 @@ Qed.
 
 Corollary runWChurch_is_well_typed : forall constants expression elaboration,
   runWChurch constants expression = Ok elaboration ->
-  exists checked : Checked 0 [] (raw_church_term elaboration),
-    checkClosed (raw_church_term elaboration) = Ok checked.
+  exists checked : Checked 0 [] (church_term elaboration),
+    checkClosed (church_term elaboration) = Ok checked.
 Proof.
   intros constants expression elaboration Hchurch.
   destruct (runWChurch_type_bridge
@@ -1621,8 +1621,8 @@ Proof.
 Qed.
 
 (** These two syntactic operations change only the explicit type layer. *)
-Lemma erase_raw_apply_type_arguments : forall function arguments,
-  erase_raw (apply_type_arguments function arguments) = erase_raw function.
+Lemma fterm_to_term_apply_type_arguments : forall function arguments,
+  fterm_to_term (apply_type_arguments function arguments) = fterm_to_term function.
 Proof.
   intros function arguments.
   revert function.
@@ -1633,12 +1633,12 @@ Proof.
     reflexivity.
 Qed.
 
-Lemma erase_raw_wrap_type_abstractions : forall generalized body,
-  erase_raw (wrap_type_abstractions generalized body) = erase_raw body.
+Lemma fterm_to_term_wrap_type_abstractions : forall generalized body,
+  fterm_to_term (wrap_type_abstractions generalized body) = fterm_to_term body.
 Proof.
   induction generalized as [| variable generalized IH]; intro body.
   - reflexivity.
-  - cbn [wrap_type_abstractions erase_raw].
+  - cbn [wrap_type_abstractions fterm_to_term].
     exact (IH body).
 Qed.
 
@@ -1649,7 +1649,7 @@ Theorem reify_w_elab_tree_semantic_preserves_erasure : forall
     constants valuation term_variables tree raw,
   reify_w_elab_tree_semantic constants valuation term_variables tree = Ok raw ->
   erase_hm term_variables (w_elab_tree_source tree) =
-    Some (erase_raw raw).
+    Some (fterm_to_term raw).
 Proof.
   intros constants valuation term_variables tree.
   revert constants valuation term_variables.
@@ -1668,19 +1668,19 @@ Proof.
     cbn [w_elab_tree_source erase_hm].
     rewrite Hlookup.
     cbn.
-    now rewrite erase_raw_apply_type_arguments.
+    now rewrite fterm_to_term_apply_type_arguments.
   - destruct (reify_w_elab_tree_semantic constants valuation
       (variable :: term_variables) body)
       as [body' | error] eqn:Hbody; try discriminate.
     inversion Hreification; subst raw.
-    cbn [w_elab_tree_source erase_hm erase_raw].
+    cbn [w_elab_tree_source erase_hm fterm_to_term].
     now rewrite (IHbody constants valuation
       (variable :: term_variables) body' Hbody).
   - set (argument_valuation :=
       valuation_after_substitution constants unifier valuation).
     set (function_valuation :=
       valuation_after_substitution constants
-        (compose_subst (w_elab_tree_substitution argument) unifier)
+        (comp_subst (w_elab_tree_substitution argument) unifier)
         valuation).
     fold argument_valuation function_valuation in Hreification.
     destruct (reify_w_elab_tree_semantic constants function_valuation
@@ -1690,7 +1690,7 @@ Proof.
       term_variables argument) as [argument' | error]
       eqn:Hargument; try discriminate.
     inversion Hreification; subst raw.
-    cbn [w_elab_tree_source erase_hm erase_raw].
+    cbn [w_elab_tree_source erase_hm fterm_to_term].
     rewrite (IHfunction constants function_valuation term_variables
       function' Hfunction).
     rewrite (IHargument constants argument_valuation term_variables
@@ -1707,20 +1707,20 @@ Proof.
       (variable :: term_variables) body) as [body' | error]
       eqn:Hbody; try discriminate.
     inversion Hreification; subst raw.
-    cbn [w_elab_tree_source erase_hm erase_raw].
+    cbn [w_elab_tree_source erase_hm fterm_to_term].
     rewrite (IHbound constants
       (generalized_valuation generalized body_valuation)
       term_variables bound' Hbound).
     rewrite (IHbody constants valuation (variable :: term_variables)
       body' Hbody).
-    now rewrite erase_raw_wrap_type_abstractions.
+    now rewrite fterm_to_term_wrap_type_abstractions.
 Qed.
 
 Theorem runWChurch_unchecked_preserves_erasure : forall
     constants expression elaboration,
   runWChurch_unchecked constants expression = Ok elaboration ->
   erase_hm_closed expression =
-    Some (erase_raw (raw_church_term elaboration)).
+    Some (fterm_to_term (church_term elaboration)).
 Proof.
   intros constants expression elaboration Hchurch.
   unfold runWChurch_unchecked in Hchurch.
@@ -1745,8 +1745,8 @@ Proof.
         tau final_substitution tree Helaboration) as [Hsource Htype].
     unfold erase_hm_closed.
     rewrite <- Hsource.
-    cbn [raw_church_term].
-    rewrite erase_raw_wrap_type_abstractions.
+    cbn [church_term].
+    rewrite fterm_to_term_wrap_type_abstractions.
     exact Herasure.
   - discriminate.
 Qed.
@@ -1755,7 +1755,7 @@ Theorem runWChurch_preserves_erasure : forall
     constants expression elaboration,
   runWChurch constants expression = Ok elaboration ->
   erase_hm_closed expression =
-    Some (erase_raw (raw_church_term elaboration)).
+    Some (fterm_to_term (church_term elaboration)).
 Proof.
   intros constants expression elaboration Hchurch.
   apply
@@ -1769,12 +1769,12 @@ Qed.
 Definition checked_church_erasure
     (checked : CheckedChurchElaboration) : SystemF.F.Syntax.term :=
   match checked_church_certificate checked with
-  | existT _ _ (exist _ intrinsic _) => fterm_to_term intrinsic
+  | existT _ _ (exist _ intrinsic _) => fderiv_to_term intrinsic
   end.
 
 Lemma checked_church_erasure_is_raw : forall checked,
-  erase_raw
-    (raw_church_term (checked_church_elaboration checked)) =
+  fterm_to_term
+    (church_term (checked_church_elaboration checked)) =
   checked_church_erasure checked.
 Proof.
   intros [elaboration certificate Htype].
@@ -1783,7 +1783,7 @@ Proof.
   cbn [checked_church_elaboration
     checked_church_certificate checked_church_erasure].
   rewrite <- Hforget.
-  apply erase_raw_forget.
+  apply fterm_to_term_forget.
 Qed.
 
 Theorem runWChurchChecked_preserves_erasure : forall

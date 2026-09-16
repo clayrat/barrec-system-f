@@ -8,7 +8,7 @@ From SystemF.F Require Import Syntax.
 Implicit Types
   (n m cutoff : nat)
   (T U : type)
-  (context : list type).
+  (ctx : list type).
 
 (** [closed n T] means that every free de Bruijn index in [T] is
     strictly below [n].  Crossing [TForall] makes one additional type
@@ -124,26 +124,26 @@ Proof.
 Qed.
 
 (** Under a type abstraction every type in the term-variable context is
-    lifted in exactly the way required by [FTAbs]. *)
-Lemma closed_context_lift : forall n context,
-  Forall (closed n) context ->
-  Forall (closed (S n)) (map (type_lift 0) context).
+    lifted in exactly the way required by [DTLam]. *)
+Lemma closed_ctx_lift : forall n ctx,
+  Forall (closed n) ctx ->
+  Forall (closed (S n)) (map (type_lift 0) ctx).
 Proof.
-  intros n context Hcontext.
-  induction Hcontext as [| T context HT Hcontext IH]; cbn.
+  intros n ctx Hctx.
+  induction Hctx as [| T ctx HT Hctx IH]; cbn.
   - constructor.
   - constructor.
     + now apply closed_type_lift0.
     + exact IH.
 Qed.
 
-Lemma closed_nth_error : forall n context index T,
-  Forall (closed n) context ->
-  nth_error context index = Some T ->
+Lemma closed_nth_error : forall n ctx index T,
+  Forall (closed n) ctx ->
+  nth_error ctx index = Some T ->
   closed n T.
 Proof.
-  intros n context index T Hcontext Hlookup.
-  apply (proj1 (Forall_forall (closed n) context) Hcontext T).
+  intros n ctx index T Hctx Hlookup.
+  apply (proj1 (Forall_forall (closed n) ctx) Hctx T).
   eapply nth_error_In.
   exact Hlookup.
 Qed.

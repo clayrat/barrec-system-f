@@ -5,33 +5,35 @@
 
 Set Implicit Arguments.
 
-From SystemF.HM.WInCoq Require Import LibTactics.
-From SystemF.HM.WInCoq Require Import Sublist.
-From SystemF.HM.WInCoq Require Import Context.
-From SystemF.HM.WInCoq Require Import ListIds.
-From SystemF.HM.WInCoq Require Import Schemes.
-From SystemF.HM.WInCoq Require Import SubstSchm.
-From SystemF.HM.WInCoq Require Import Rename.
-From SystemF.HM.WInCoq Require Import Disjoints.
-From SystemF.HM.WInCoq Require Import Subst.
-From SystemF.HM.WInCoq Require Import Gen.
+From SystemF.HM.W Require Import LibTactics.
+From SystemF.HM.W Require Import Sublist.
+From SystemF.HM.W Require Import Context.
+From SystemF.HM.W Require Import ListIds.
+From SystemF.HM.W Require Import Schemes.
+From SystemF.HM.W Require Import SubstSchm.
+From SystemF.HM.W Require Import Rename.
+From SystemF.HM.W Require Import Disjoints.
+From SystemF.HM.W Require Import Subst.
+From SystemF.HM.W Require Import Gen.
 Require Import Arith.Arith_base.
 Require Import List.
-From SystemF.HM.WInCoq Require Import SimpleTypes.
-From SystemF.HM.WInCoq Require Import MyLtacs.
+From SystemF.HM.W Require Import SimpleTypes.
+From SystemF.HM.W Require Import MyLtacs.
 
 (** * Lambda term definition *)
 
-Inductive term : Set :=
-| var_t   : id -> term
-| app_t   : term -> term -> term
-| let_t   : id -> term -> term -> term
-| lam_t   : id -> term -> term
-| const_t : id -> term.
+(** Upstream W-in-Coq calls this type [term].  It is [hmterm] here so that
+    [term] keeps denoting the untyped System F term of SystemF.F.Syntax. *)
+Inductive hmterm : Set :=
+| var_t   : id -> hmterm
+| app_t   : hmterm -> hmterm -> hmterm
+| let_t   : id -> hmterm -> hmterm -> hmterm
+| lam_t   : id -> hmterm -> hmterm
+| const_t : id -> hmterm.
 
 (** * Syntax-directed rule system of Damas-Milner *)
 
-Inductive has_type : ctx -> term -> ty -> Prop :=
+Inductive has_type : hmctx -> hmterm -> ty -> Prop :=
 | const_ht : forall x G, has_type G (const_t x) (con x)
 | var_ht : forall x G sigma tau, in_ctx x G = Some sigma -> is_schm_instance tau sigma ->
                             has_type G (var_t x) tau
@@ -113,7 +115,7 @@ Qed.
 
 Hint Resolve has_type_is_stable_under_substitution:core.
 
-Lemma has_type_var_ctx_diff : forall (i j : id) (G : ctx) (tau : ty) (sigma : schm),
+Lemma has_type_var_ctx_diff : forall (i j : id) (G : hmctx) (tau : ty) (sigma : schm),
     i <> j -> has_type G (var_t i) tau -> has_type ((j, sigma) :: G) (var_t i) tau.
 Proof.
   intros.

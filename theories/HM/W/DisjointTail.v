@@ -6,18 +6,18 @@
 
 Set Implicit Arguments.
 
-From SystemF.HM.WInCoq Require Import SubstSchm.
+From SystemF.HM.W Require Import SubstSchm.
 Require Import List.
-From SystemF.HM.WInCoq Require Import ListIds.
-From SystemF.HM.WInCoq Require Import Context.
-From SystemF.HM.WInCoq Require Import Disjoints.
-From SystemF.HM.WInCoq Require Import Gen.
-From SystemF.HM.WInCoq Require Import SimpleTypes.
-From SystemF.HM.WInCoq Require Import Subst.
-From SystemF.HM.WInCoq Require Import Context.
-From SystemF.HM.WInCoq Require Import MyLtacs.
-From SystemF.HM.WInCoq Require Import NthErrorTools.
-From SystemF.HM.WInCoq Require Import LibTactics.
+From SystemF.HM.W Require Import ListIds.
+From SystemF.HM.W Require Import Context.
+From SystemF.HM.W Require Import Disjoints.
+From SystemF.HM.W Require Import Gen.
+From SystemF.HM.W Require Import SimpleTypes.
+From SystemF.HM.W Require Import Subst.
+From SystemF.HM.W Require Import Context.
+From SystemF.HM.W Require Import MyLtacs.
+From SystemF.HM.W Require Import NthErrorTools.
+From SystemF.HM.W Require Import LibTactics.
 
 
 (** * Disjoint tail *)
@@ -31,7 +31,7 @@ Hint Constructors is_disjoint_with_some_tail:core.
 
 (** ** Lemmas about disjoint tail *)
 
-Lemma is_prefixe_gen_aux : forall (l L : list id) (tau : ty) (G : ctx),
+Lemma is_prefixe_gen_aux : forall (l L : list id) (tau : ty) (G : hmctx),
     is_disjoint_with_some_tail (FV_ctx G) (snd (gen_ty_aux tau G l)) L ->
     is_disjoint_with_some_tail (FV_ctx G) l L.
 Proof.

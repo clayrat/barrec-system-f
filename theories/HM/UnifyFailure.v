@@ -2,7 +2,7 @@
 
 From Stdlib Require Import Lia.
 From SystemF.HM Require Export UnifySpec.
-From SystemF.HM.WInCoq Require Export HoareMonad Occurs.
+From SystemF.HM.W Require Export HoareMonad Occurs.
 
 Fixpoint ty_size (t : ty) : nat :=
   match t with
@@ -65,8 +65,8 @@ Proof.
     apply (IHfailure delta).
     repeat rewrite <- apply_compose_equiv.
     rewrite <-
-      (ext_subst_var_ty theta (compose_subst s delta) Hdelta r).
+      (ext_subst_var_ty theta (comp_subst s delta) Hdelta r).
     rewrite <-
-      (ext_subst_var_ty theta (compose_subst s delta) Hdelta r').
+      (ext_subst_var_ty theta (comp_subst s delta) Hdelta r').
     exact H1.
 Qed.

@@ -16,7 +16,7 @@ Import ListNotations.
 
 From SystemF.HM Require Import
   ElabScope Unify WCorrespondence WCorrect WExec WExecCorrect.
-From SystemF.HM.WInCoq Require Import
+From SystemF.HM.W Require Import
   Context Gen Infer Schemes SubstSchm Typing.
 
 Inductive WElabFailure : Set :=
@@ -69,17 +69,17 @@ Fixpoint w_elab_tree_substitution (tree : WElabTree) : substitution :=
   | elab_variable _ _ _ _ => []
   | elab_lambda _ _ _ body => w_elab_tree_substitution body
   | elab_application function argument _ _ _ unifier _ =>
-      compose_subst
+      comp_subst
         (w_elab_tree_substitution function)
-        (compose_subst
+        (comp_subst
           (w_elab_tree_substitution argument) unifier)
   | elab_let _ _ _ _ bound body =>
-      compose_subst
+      comp_subst
         (w_elab_tree_substitution bound)
         (w_elab_tree_substitution body)
   end.
 
-Fixpoint w_elab_tree_source (tree : WElabTree) : term :=
+Fixpoint w_elab_tree_source (tree : WElabTree) : hmterm :=
   match tree with
   | elab_variable variable _ _ _ => var_t variable
   | elab_lambda variable _ _ body =>
@@ -149,7 +149,7 @@ Definition erase_w_elab_result (result : w_elab_result) : w_result :=
 (** Compute the scheme and retain the generalized HM identifiers that
     [gen_ty] normally discards. *)
 Definition generalize_for_elaboration
-    (tau : ty) (environment : ctx) : schm * list id :=
+    (tau : ty) (environment : hmctx) : schm * list id :=
   gen_ty_aux tau environment [].
 
 Lemma generalize_for_elaboration_scheme : forall tau environment,
@@ -158,7 +158,7 @@ Lemma generalize_for_elaboration_scheme : forall tau environment,
 Proof. reflexivity. Qed.
 
 Fixpoint W_elab
-    (expression : term) (environment : ctx) (state : id)
+    (expression : hmterm) (environment : hmctx) (state : id)
     : w_elab_state_result :=
   match expression with
   | const_t constant =>
@@ -213,7 +213,7 @@ Fixpoint W_elab
               | unified unifier =>
                   let result := apply_subst unifier (var alpha) in
                   w_elab_state_success result
-                    (compose_subst s1 (compose_subst s2 unifier))
+                    (comp_subst s1 (comp_subst s2 unifier))
                     (S state2)
                     (elab_application
                       function_tree argument_tree alpha left right
@@ -237,7 +237,7 @@ Fixpoint W_elab
           | w_elab_state_rejected failure =>
               w_elab_state_rejected failure
           | w_elab_state_success tau2 s2 state2 body_tree =>
-              w_elab_state_success tau2 (compose_subst s1 s2) state2
+              w_elab_state_success tau2 (comp_subst s1 s2) state2
                 (elab_let variable tau1 generalized sigma
                   bound_tree body_tree)
           end
@@ -245,7 +245,7 @@ Fixpoint W_elab
   end.
 
 Definition runW_elab
-    (expression : term) (environment : ctx) : w_elab_result :=
+    (expression : hmterm) (environment : hmctx) : w_elab_result :=
   match W_elab expression environment (initial_state_exec environment) with
   | w_elab_state_success tau substitution _ tree =>
       elaborated tau substitution tree
@@ -479,7 +479,7 @@ Qed.
     their existence; successful results agree on the exact type and
     substitution while retaining the elaboration tree. *)
 Definition runW_elab_checked_spec
-    (expression : term) (environment : ctx) : Prop :=
+    (expression : hmterm) (environment : hmctx) : Prop :=
   (forall tau substitution,
     (exists tree,
       runW_elab expression environment =

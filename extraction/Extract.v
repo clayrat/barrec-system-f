@@ -33,11 +33,11 @@ Extraction Language OCaml.
 Set Extraction Output Directory ".".
 
 Extraction "systemf.ml"
-  type_lift type_subst term_equal term_lift fterm_to_term
+  type_lift type_subst term_equal term_lift fderiv_to_term
   term_subst1 wh_step run_fuel eval_cap
   brec bound
   type1 term1 type2 term2 term3 term4 erased_examples
-  check_core checkClosed checked_inferred erase_raw
+  check_core checkClosed checked_inferred fterm_to_term
   raw_term1 raw_term2 raw_term3 raw_term4
   boundary_curry_identity boundary_identity_type
   boundary_identity_arrow_type boundary_raw_polymorphic_identity
@@ -77,13 +77,13 @@ Extraction "systemf.ml"
   scheme_body_to_type quantify_scheme scheme_to_systemf
   hm_principal_scheme hm_principal_type
   infer_systemf_type_exec infer_relational_formula_exec
-  ChurchReifyError WChurchError RawChurchElaboration
+  ChurchReifyError WChurchError ChurchElaboration
   CheckedChurchElaboration
   reification_default_type
   apply_type_arguments wrap_type_abstractions
   reify_w_elab_tree_semantic runWChurch_unchecked
-  certify_raw_church_elaboration erase_checked_church_result
-  validate_raw_church_elaboration runWChurchChecked runWChurch
+  certify_church_elaboration erase_checked_church_result
+  validate_church_elaboration runWChurchChecked runWChurch
   checked_church_erasure
   NormalizationBoundSource NormalizationResult normalization_erasure
   normalize_intrinsic normalize_intrinsic_with_cap

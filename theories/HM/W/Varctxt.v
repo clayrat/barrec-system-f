@@ -6,10 +6,10 @@
 Set Implicit Arguments.
 
 Require Import Arith.Arith_base List Lia.
-From SystemF.HM.WInCoq Require Import LibTactics.
-From SystemF.HM.WInCoq Require Import SimpleTypes.
-From SystemF.HM.WInCoq Require Import Subst.
-From SystemF.HM.WInCoq Require Import MyLtacs.
+From SystemF.HM.W Require Import LibTactics.
+From SystemF.HM.W Require Import SimpleTypes.
+From SystemF.HM.W Require Import Subst.
+From SystemF.HM.W Require Import MyLtacs.
 Import ListNotations.
 
 
@@ -86,8 +86,8 @@ Hint Resolve member_app_comm:core.
 
 (** Removing a variable from a variable context *)
 
-Fixpoint remove (v : id) (ctx : varctxt) : varctxt :=
-  match ctx with
+Fixpoint remove (v : id) (hmctx : varctxt) : varctxt :=
+  match hmctx with
     | nil => nil
     | y :: ys => if eq_id_dec y v then remove v ys else y :: (remove v ys)
   end.
@@ -100,9 +100,9 @@ Qed.
 Hint Resolve remove_nil:core.
 Hint Rewrite remove_nil.
 
-Lemma remove_diff_member : forall x t ctx, member ctx t -> x <> t -> member (remove x ctx) t.
+Lemma remove_diff_member : forall x t hmctx, member hmctx t -> x <> t -> member (remove x hmctx) t.
 Proof.
-  induction ctx ; crush.
+  induction hmctx ; crush.
 Qed.
 
 Hint Resolve remove_diff_member:core.

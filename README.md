@@ -13,11 +13,11 @@ adaptation of W-in-Coq.
 
 | Component | Current status |
 | --- | --- |
-| F type/term syntax, lifting, type substitution, erasure | Copied from Blot; OPE `drop`/`keep` renaming and parallel substitution are proved equivalent to the original operations |
+| F type/term syntax, lifting, type substitution, erasure | Copied from Blot, with Blot's intrinsic `fterm` renamed to the typing derivation `fderiv` (`fterm` is the annotated Church syntax); OPE `drop`/`keep` renaming and parallel substitution are proved equivalent to the original operations |
 | Shared examples term1–term4 | Defined in Rocq; erasures and weak-head evaluations printed by the OCaml driver |
 | Type-variable scope and Church checker | Complete: scope and OPE lemmas, computational `check_core`, proof-carrying `Checked`, `check`/`checkClosed`, success/completeness/rejection theorems, and kernel regressions |
 | W and its corrected unifier | Complete Rocq 9.1 adaptation: proof-free `unify_exec`/`W_exec`, checked success and rejection contracts, universal checked/executable correspondence, an extracted event trace, and generated monomorphic/let-polymorphic `let x_(n+1) = (x_n, x_n)` stress families |
-| Relational formulas and generator | Complete: `relate_correct` proves generator correspondence, the separate abstraction lemma proves every intrinsic `fterm` logically related to itself, and `closed_fterm_satisfies_relgen` connects typed terms to generated formulas; `relate_presented` is a guarded post-pass over `relate`, with a general semantics-preservation theorem, and prints Church encodings as `Bool`, `[A]`, and `ListRel` |
+| Relational formulas and generator | Complete: `relate_correct` proves generator correspondence, the separate abstraction lemma proves every intrinsic `fderiv` logically related to itself, and `closed_fderiv_satisfies_relgen` connects typed terms to generated formulas; `relate_presented` is a guarded post-pass over `relate`, with a general semantics-preservation theorem, and prints Church encodings as `Bool`, `[A]`, and `ListRel` |
 | Independent WH-reducer | Implemented with a capped exact-step oracle and Rocq correspondence proofs |
 | HM elaboration | Complete: semantic tree reification preserves W typing, dead internal variables default to `forall X. X -> X`, every constructed term is accepted by `checkClosed` exactly at `hm_principal_type`, and public `runWChurch` succeeds iff `W_elab` succeeds |
 | Repaired bound and BBC experiment | Repaired `term_subst`/`isrc`/`adeq`/`bound` are ported to `BarRec/Bound.v` over the shared syntax and extracted with the reviewed `brec`; the ordinary demo consumes live `query`/`hit`/`miss`/`update` events, term1 and term4 satisfy the independent oracle, while term3 remains a slow acceptance run |
@@ -136,11 +136,12 @@ outside _CoqProject and is compiled by its own Makefile before dune runs.
 ~~~text
 theories/
   F/                 syntax, scope, Church checking, WH-semantics
-  F/RawTyping.v      extrinsic Church typing and checker completeness
+  F/Typing.v         extrinsic Church typing and checker completeness
   HM/                public W/unification facade and adapted W-in-Coq sources
+  HM/W/              adapted W-in-Coq sources, logical prefix SystemF.HM.W
   FreeTheorems/      formulas, generation, correctness
   BarRec/            repaired realizers and bound
-  HMElab.v           principal-type bridge and W-tree reification to RawChurch
+  HMElab.v           principal-type bridge and W-tree reification to fterm
   CurryChurchBoundary.v  checked many-to-one erasure and rank-1 recovery demo
   Normalization.v    checked intrinsic term to bound-driven WH reduction
   HM/ElabScope.v      decidable constant-free source fragment for W elaboration
@@ -250,12 +251,12 @@ implementation; any drift requires explicit review.
 The hand-written HM parser consumes complete input, resolves lexical names,
 and sends its result to W. The separate Church parser handles the complete
 explicit F grammar, resolves term and type names in independent de Bruijn
-namespaces, and produces `RawChurch`; syntax accepted by it is still accepted
+namespaces, and produces `fterm`; syntax accepted by it is still accepted
 or rejected only by verified `checkClosed`. Both parsers remain outside Rocq's
 trusted kernel. The
 verified-side `runWChurchChecked` now reifies W's structural decisions into
-`RawChurch`, validates the result through `checkClosed`, and retains its
-intrinsic `fterm`; its success theorem equates the checked type, W's
+`fterm`, validates the result through `checkClosed`, and retains its
+intrinsic `fderiv`; its success theorem equates the checked type, W's
 translated principal type, and the type exposed by the bridge. The general
 erasure theorem identifies that intrinsic term with `erase_hm_closed` of the
 source. Internal W metavariables absent from the principal result are
@@ -287,6 +288,8 @@ bar recursion; see [bench/README.md](bench/README.md).
 [Blot's baseline](vendor/blot/README.md) is retained unchanged, with its
 original GPL license. F/Syntax.v reuses definitions from that artifact.
 The untouched W-in-Coq snapshot is retained with its GPL license; its Rocq 9.1
-adaptation is built under `SystemF.HM.WInCoq`. The plan records the distinct
-reference roles of Atkey/ref-graphs and unification-cm; their code is not linked
-into the executable.
+adaptation is built under `SystemF.HM.W`. Upstream is
+[rafaelcgs10/W-in-Coq](https://github.com/rafaelcgs10/W-in-Coq); the vendored
+snapshot is revision `a579e188b402a462840250e6f454fd6752b116bc`. The plan
+records the distinct reference roles of Atkey/ref-graphs and unification-cm;
+their code is not linked into the executable.

@@ -5,13 +5,13 @@
 Set Implicit Arguments.
 
 Require Import Arith.Arith_base List Lia.
-From SystemF.HM.WInCoq Require Import SimpleTypes.
-From SystemF.HM.WInCoq Require Import LibTactics.
-From SystemF.HM.WInCoq Require Import SimpleTypes.
-From SystemF.HM.WInCoq Require Import MyLtacs.
-From SystemF.HM.WInCoq Require Import SimpleTypes.
+From SystemF.HM.W Require Import SimpleTypes.
+From SystemF.HM.W Require Import LibTactics.
+From SystemF.HM.W Require Import SimpleTypes.
+From SystemF.HM.W Require Import MyLtacs.
+From SystemF.HM.W Require Import SimpleTypes.
 Require Import Program.
-From SystemF.HM.WInCoq Require Import Subst.
+From SystemF.HM.W Require Import Subst.
 Import ListNotations.
 
 

@@ -5,7 +5,7 @@ From Stdlib Require Import
 Import ListNotations.
 
 From SystemF.HM Require Import WExec WExecCorrect WCorrect Unify.
-From SystemF.HM.WInCoq Require Import
+From SystemF.HM.W Require Import
   Context HoareMonad Infer NewTypeVariable SimpleTypes Subst Typing.
 
 (** Hoare computations may receive different proofs of the same
@@ -317,7 +317,7 @@ Proof.
 Qed.
 
 Definition observe_checked_W
-    (e : term) (G : ctx) (st : id) (fresh : new_tv_ctx G st)
+    (e : hmterm) (G : hmctx) (st : id) (fresh : new_tv_ctx G st)
     : w_state_result :=
   observe_checked_state_result
     (proj1_sig (W e G (exist _ st fresh))).
@@ -464,7 +464,7 @@ Proof.
                  (observe_bind_ret_W first
                    (fun s =>
                      (apply_subst s (var st2),
-                      compose_subst s1 (compose_subst s2 s))) input)
+                      comp_subst s1 (comp_subst s2 s))) input)
                  as Hunify
            end.
            refine (eq_trans Hunify _).
@@ -475,7 +475,7 @@ Proof.
                exact (observe_unify_exec_hoare
                  (fun s =>
                    (apply_subst s (var st2),
-                    compose_subst s1 (compose_subst s2 s)))
+                    comp_subst s1 (comp_subst s2 s)))
                  left right (S st2) pre)
            end.
         -- cbn [proj1_sig Infer.fresh] in Hfresh.

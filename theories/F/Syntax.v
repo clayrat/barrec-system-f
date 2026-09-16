@@ -2,10 +2,17 @@
 
     These definitions are copied without semantic changes from Valentin
     Blot's 2018 artifact, Coq/f.v. The original file and its license are
-    retained in vendor/blot/.
+    retained in vendor/blot/.  Only the names differ: the artifact's
+    intrinsically typed [fterm]/[fvar], with constructors
+    [FVar]/[FAbs]/[FApp]/[FTAbs]/[FTApp] and [FVar0]/[FVarS], are called
+    [fderiv]/[dvar] with [DVar]/[DLam]/[DApp]/[DTLam]/[DTApp] and
+    [DVar0]/[DVarS] here; its [fterm_to_term] is [fderiv_to_term], and its
+    untyped [Abs] is [Lam].  A value of [fderiv ctx T] is a typing
+    derivation; the name [fterm] belongs to the annotated Church-style terms
+    of F.Check.
 
     Type variables and term variables use separate de Bruijn indices.
-    [fterm] records typing, but does not enforce type-variable scope;
+    [fderiv] records typing, but does not enforce type-variable scope;
     that additional invariant belongs to F.Scope and F.Check.
 
     The artifact's simultaneous [term_subst] is not part of this shared
@@ -27,7 +34,7 @@ Inductive type : Type :=
 Implicit Types
   (n m : nat)
   (T U : type)
-  (context : list type).
+  (ctx : list type).
 
 (** [type_lift n T] increments every free variable of [T] whose index is
     greater than or equal to [n]. *)
@@ -55,68 +62,68 @@ Fixpoint type_subst (n : nat) (T : type) (U : type) : type :=
 (** ** Intrinsically typed System F terms *)
 
 (** Term variables also use de Bruijn indices. *)
-Inductive fvar : list type -> type -> Type :=
-| FVar0 : forall {context} T, fvar (T :: context) T
-| FVarS : forall {context T U},
-    fvar context T ->
-    fvar (U :: context) T.
+Inductive dvar : list type -> type -> Type :=
+| DVar0 : forall {ctx} T, dvar (T :: ctx) T
+| DVarS : forall {ctx T U},
+    dvar ctx T ->
+    dvar (U :: ctx) T.
 
-Inductive fterm : list type -> type -> Type :=
-| FVar : forall {context T},
-    fvar context T ->
-    fterm context T
-| FAbs : forall {context T U},
-    fterm (T :: context) U ->
-    fterm context (TArrow T U)
-| FApp : forall {context T U},
-    fterm context (TArrow T U) ->
-    fterm context T ->
-    fterm context U
-| FTAbs : forall {context T},
-    fterm (map (type_lift 0) context) T ->
-    fterm context (TForall T)
-| FTApp : forall {context T},
-    fterm context (TForall T) ->
-    forall U, fterm context (type_subst 0 T U).
+Inductive fderiv : list type -> type -> Type :=
+| DVar : forall {ctx T},
+    dvar ctx T ->
+    fderiv ctx T
+| DLam : forall {ctx T U},
+    fderiv (T :: ctx) U ->
+    fderiv ctx (TArrow T U)
+| DApp : forall {ctx T U},
+    fderiv ctx (TArrow T U) ->
+    fderiv ctx T ->
+    fderiv ctx U
+| DTLam : forall {ctx T},
+    fderiv (map (type_lift 0) ctx) T ->
+    fderiv ctx (TForall T)
+| DTApp : forall {ctx T},
+    fderiv ctx (TForall T) ->
+    forall U, fderiv ctx (type_subst 0 T U).
 
-Definition fterm_get_context {context T} (t : fterm context T) :=
-  context.
+Definition fderiv_get_ctx {ctx T} (t : fderiv ctx T) :=
+  ctx.
 
-Definition fterm_get_type {context T} (t : fterm context T) :=
+Definition fderiv_get_type {ctx T} (t : fderiv ctx T) :=
   T.
 
 (** ** Untyped lambda terms *)
 
 Inductive term : Type :=
 | Var : nat -> term
-| Abs : term -> term
+| Lam : term -> term
 | App : term -> term -> term.
 
 Implicit Types (t u : term).
 
 (** Erasure from Church-style System F terms to untyped Curry-style
     lambda terms. *)
-Fixpoint fvar_to_nat {context T} (variable : fvar context T) : nat :=
+Fixpoint dvar_to_nat {ctx T} (variable : dvar ctx T) : nat :=
   match variable with
-  | FVar0 _ => 0
-  | FVarS variable' => S (fvar_to_nat variable')
+  | DVar0 _ => 0
+  | DVarS variable' => S (dvar_to_nat variable')
   end.
 
-Fixpoint fterm_to_term {context T} (t : fterm context T) : term :=
+Fixpoint fderiv_to_term {ctx T} (t : fderiv ctx T) : term :=
   match t with
-  | FVar variable => Var (fvar_to_nat variable)
-  | FAbs body => Abs (fterm_to_term body)
-  | FApp function argument =>
-      App (fterm_to_term function) (fterm_to_term argument)
-  | FTAbs body => fterm_to_term body
-  | FTApp function _ => fterm_to_term function
+  | DVar variable => Var (dvar_to_nat variable)
+  | DLam body => Lam (fderiv_to_term body)
+  | DApp function argument =>
+      App (fderiv_to_term function) (fderiv_to_term argument)
+  | DTLam body => fderiv_to_term body
+  | DTApp function _ => fderiv_to_term function
   end.
 
 (** Boolean syntactic equality of untyped terms. *)
 Fixpoint term_equal (t : term) (u : term) : bool :=
   match t, u with
   | Var m, Var n => m =? n
-  | Abs t, Abs u => term_equal t u
+  | Lam t, Lam u => term_equal t u
   | App t1 t2, App u1 u2 =>
       andb (term_equal t1 u1) (term_equal t2 u2)
   | _, _ => false
@@ -127,6 +134,6 @@ Fixpoint term_equal (t : term) (u : term) : bool :=
 Fixpoint term_lift (n : nat) (t : term) : term :=
   match t with
   | Var m => if m <? n then Var m else Var (S m)
-  | Abs t => Abs (term_lift (S n) t)
+  | Lam t => Lam (term_lift (S n) t)
   | App t u => App (term_lift n t) (term_lift n u)
   end.

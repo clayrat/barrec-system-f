@@ -15,7 +15,7 @@ From SystemF.F Require Import Syntax Scope.
 From SystemF.FreeTheorems Require Import Formula.
 
 Implicit Types
-  (n type_depth value_depth : nat)
+  (n ty_depth value_depth : nat)
   (T U : type)
   (lhs rhs : ValueExpr).
 
@@ -95,13 +95,13 @@ Definition relgen (T : type) : RelFormula :=
 
 (** ** Scope infrastructure *)
 
-Lemma project_type_with_scoped : forall T n type_depth rho,
+Lemma project_type_with_scoped : forall T n ty_depth rho,
   closed n T ->
-  (forall index, index < n -> rho index < type_depth) ->
-  formula_type_scoped type_depth (project_type_with rho T).
+  (forall index, index < n -> rho index < ty_depth) ->
+  formula_type_scoped ty_depth (project_type_with rho T).
 Proof.
   induction T as [index | T IHT U IHU | T IHT];
-    intros n type_depth rho Hclosed Hrho;
+    intros n ty_depth rho Hclosed Hrho;
     cbn [closed project_type_with formula_type_scoped] in *.
   - now apply Hrho.
   - destruct Hclosed as [HT HU].
@@ -140,14 +140,14 @@ Proof.
 Qed.
 
 Lemma formula_type_lift_scoped : forall (formula_type : FormulaType)
-    cutoff type_depth,
-  cutoff <= type_depth ->
-  formula_type_scoped type_depth formula_type ->
-  formula_type_scoped (S type_depth)
+    cutoff ty_depth,
+  cutoff <= ty_depth ->
+  formula_type_scoped ty_depth formula_type ->
+  formula_type_scoped (S ty_depth)
     (formula_type_lift cutoff formula_type).
 Proof.
   induction formula_type as [index | T IHT U IHU | T IHT];
-    intros cutoff type_depth Hcutoff Hscoped;
+    intros cutoff ty_depth Hcutoff Hscoped;
     cbn [formula_type_scoped formula_type_lift] in *.
   - unfold lift_index.
     destruct (index <? cutoff) eqn:Hlt.
@@ -164,11 +164,11 @@ Proof.
     + exact Hscoped.
 Qed.
 
-Lemma value_lift_scoped : forall type_depth value_depth value,
-  value_scoped type_depth value_depth value ->
-  value_scoped type_depth (S value_depth) (value_lift 0 value).
+Lemma value_lift_scoped : forall ty_depth value_depth value,
+  value_scoped ty_depth value_depth value ->
+  value_scoped ty_depth (S value_depth) (value_lift 0 value).
 Proof.
-  intros type_depth value_depth value.
+  intros ty_depth value_depth value.
   induction value as
       [index | name | function IHfunction argument IHargument
        | function IHfunction T];
@@ -187,11 +187,11 @@ Proof.
     + exact HT.
 Qed.
 
-Lemma value_type_lift_scoped : forall type_depth value_depth value,
-  value_scoped type_depth value_depth value ->
-  value_scoped (S type_depth) value_depth (value_type_lift 0 value).
+Lemma value_type_lift_scoped : forall ty_depth value_depth value,
+  value_scoped ty_depth value_depth value ->
+  value_scoped (S ty_depth) value_depth (value_type_lift 0 value).
 Proof.
-  intros type_depth value_depth value.
+  intros ty_depth value_depth value.
   induction value as
       [index | name | function IHfunction argument IHargument
        | function IHfunction T];

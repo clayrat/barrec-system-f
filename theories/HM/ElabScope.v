@@ -12,9 +12,9 @@
 
 From Stdlib Require Import Bool.
 
-From SystemF.HM.WInCoq Require Import Typing.
+From SystemF.HM.W Require Import Typing.
 
-Fixpoint constant_free (expression : term) : Prop :=
+Fixpoint constant_free (expression : hmterm) : Prop :=
   match expression with
   | var_t _ => True
   | app_t function argument =>
@@ -26,7 +26,7 @@ Fixpoint constant_free (expression : term) : Prop :=
   end.
 
 (** Boolean view used by the extracted frontend before running [W_elab]. *)
-Fixpoint constant_freeb (expression : term) : bool :=
+Fixpoint constant_freeb (expression : hmterm) : bool :=
   match expression with
   | var_t _ => true
   | app_t function argument =>
@@ -80,7 +80,7 @@ Proof.
   - reflexivity.
 Qed.
 
-Definition constant_free_dec (expression : term) :
+Definition constant_free_dec (expression : hmterm) :
     {constant_free expression} + {~ constant_free expression}.
 Proof.
   destruct (constant_freeb_spec expression).
@@ -91,5 +91,5 @@ Defined.
 (** A proof-carrying input for clients that want to make the restriction
     explicit at the API boundary. *)
 Definition HMElaborationInput : Type :=
-  {expression : term | constant_free expression}.
+  {expression : hmterm | constant_free expression}.
 

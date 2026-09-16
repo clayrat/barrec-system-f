@@ -19,7 +19,7 @@ type event =
 val enabled : unit -> bool
 val fresh_brec_id : unit -> int
 val key_var : int -> string
-val key_abs : string -> string
+val key_lam : string -> string
 val key_app : string -> string -> string
 val query : int -> int -> string -> unit
 val hit : hit_source -> int -> int -> string -> unit

@@ -9,7 +9,7 @@ From Stdlib Require Import List PeanoNat.
 Import ListNotations.
 
 From SystemF.HM Require Import Unify.
-From SystemF.HM.WInCoq Require Import
+From SystemF.HM.W Require Import
   Context Gen Schemes SubstSchm Typing.
 
 Inductive w_state_result : Set :=
@@ -21,7 +21,7 @@ Inductive w_result : Set :=
 | inference_rejected.
 
 (** Pure counterpart of [computeInitialState]. *)
-Fixpoint initial_state_exec (G : ctx) : id :=
+Fixpoint initial_state_exec (G : hmctx) : id :=
   match G with
   | [] => 0
   | (_, sigma) :: G' =>
@@ -32,8 +32,8 @@ Fixpoint initial_state_exec (G : ctx) : id :=
   end.
 
 (** The five branches and the order of state/substitution composition are the
-    same as in [SystemF.HM.WInCoq.Infer.W]. *)
-Fixpoint W_exec (e : term) (G : ctx) (st : id) : w_state_result :=
+    same as in [SystemF.HM.W.Infer.W]. *)
+Fixpoint W_exec (e : hmterm) (G : hmctx) (st : id) : w_state_result :=
   match e with
   | const_t c => w_state_success (con c) [] st
 
@@ -73,7 +73,7 @@ Fixpoint W_exec (e : term) (G : ctx) (st : id) : w_state_result :=
               | unified s =>
                   w_state_success
                     (apply_subst s (var alpha))
-                    (compose_subst s1 (compose_subst s2 s))
+                    (comp_subst s1 (comp_subst s2 s))
                     (S st2)
               end
           end
@@ -87,12 +87,12 @@ Fixpoint W_exec (e : term) (G : ctx) (st : id) : w_state_result :=
           match W_exec body ((x, gen_ty tau1 G') :: G') st1 with
           | w_state_rejected => w_state_rejected
           | w_state_success tau2 s2 st2 =>
-              w_state_success tau2 (compose_subst s1 s2) st2
+              w_state_success tau2 (comp_subst s1 s2) st2
           end
       end
   end.
 
-Definition runW_exec (e : term) (G : ctx) : w_result :=
+Definition runW_exec (e : hmterm) (G : hmctx) : w_result :=
   match W_exec e G (initial_state_exec G) with
   | w_state_success tau s _ => inferred tau s
   | w_state_rejected => inference_rejected

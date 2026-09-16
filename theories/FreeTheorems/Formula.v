@@ -14,7 +14,7 @@
 From Stdlib Require Import Lia PeanoNat.
 
 Implicit Types
-  (cutoff type_depth relation_depth value_depth : nat).
+  (cutoff ty_depth relation_depth value_depth : nat).
 
 (** Types appearing inside formulas.  Their variables use the type-variable
     namespace of the enclosing [RelFormula]. *)
@@ -189,26 +189,26 @@ Fixpoint formula_relation_lift
 (** ** Scope predicates *)
 
 Fixpoint formula_type_scoped
-    (type_depth : nat) (T : FormulaType) : Prop :=
+    (ty_depth : nat) (T : FormulaType) : Prop :=
   match T with
-  | RTVar index => index < type_depth
+  | RTVar index => index < ty_depth
   | RTArrow T U =>
-      formula_type_scoped type_depth T /\
-      formula_type_scoped type_depth U
-  | RTForall T => formula_type_scoped (S type_depth) T
+      formula_type_scoped ty_depth T /\
+      formula_type_scoped ty_depth U
+  | RTForall T => formula_type_scoped (S ty_depth) T
   end.
 
 Fixpoint value_scoped
-    (type_depth value_depth : nat) (value : ValueExpr) : Prop :=
+    (ty_depth value_depth : nat) (value : ValueExpr) : Prop :=
   match value with
   | RVBound index => index < value_depth
   | RVFree _ => True
   | RVApp function argument =>
-      value_scoped type_depth value_depth function /\
-      value_scoped type_depth value_depth argument
+      value_scoped ty_depth value_depth function /\
+      value_scoped ty_depth value_depth argument
   | RVTypeApp function T =>
-      value_scoped type_depth value_depth function /\
-      formula_type_scoped type_depth T
+      value_scoped ty_depth value_depth function /\
+      formula_type_scoped ty_depth T
   end.
 
 Fixpoint relation_scoped
@@ -222,29 +222,29 @@ Fixpoint relation_scoped
   end.
 
 Fixpoint formula_scoped
-    (type_depth relation_depth value_depth : nat)
+    (ty_depth relation_depth value_depth : nat)
     (formula : RelFormula) : Prop :=
   match formula with
   | RFTop => True
   | RFRel relation lhs rhs =>
       relation_scoped relation_depth relation /\
-      value_scoped type_depth value_depth lhs /\
-      value_scoped type_depth value_depth rhs
+      value_scoped ty_depth value_depth lhs /\
+      value_scoped ty_depth value_depth rhs
   | RFEqual lhs rhs =>
-      value_scoped type_depth value_depth lhs /\
-      value_scoped type_depth value_depth rhs
+      value_scoped ty_depth value_depth lhs /\
+      value_scoped ty_depth value_depth rhs
   | RFAnd lhs rhs | RFImplies lhs rhs =>
-      formula_scoped type_depth relation_depth value_depth lhs /\
-      formula_scoped type_depth relation_depth value_depth rhs
+      formula_scoped ty_depth relation_depth value_depth lhs /\
+      formula_scoped ty_depth relation_depth value_depth rhs
   | RFForallValue T body =>
-      formula_type_scoped type_depth T /\
-      formula_scoped type_depth relation_depth (S value_depth) body
+      formula_type_scoped ty_depth T /\
+      formula_scoped ty_depth relation_depth (S value_depth) body
   | RFForallType body =>
-      formula_scoped (S type_depth) relation_depth value_depth body
+      formula_scoped (S ty_depth) relation_depth value_depth body
   | RFForallRelation T U body =>
-      formula_type_scoped type_depth T /\
-      formula_type_scoped type_depth U /\
-      formula_scoped type_depth (S relation_depth) value_depth body
+      formula_type_scoped ty_depth T /\
+      formula_type_scoped ty_depth U /\
+      formula_scoped ty_depth (S relation_depth) value_depth body
   end.
 
 (** A generated top-level theorem has no free de Bruijn indices.  Named

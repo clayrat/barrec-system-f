@@ -4,7 +4,7 @@
     executable unifier.  The adapted W-in-Coq implementation supplies exactly
     these properties in the dependent result of [unify'']. *)
 
-From SystemF.HM.WInCoq Require Export SimpleTypes Subst NewTypeVariable.
+From SystemF.HM.W Require Export SimpleTypes Subst NewTypeVariable.
 
 Definition is_unifier (t1 t2 : ty) (s : substitution) : Prop :=
   apply_subst s t1 = apply_subst s t2.
@@ -15,7 +15,7 @@ Definition substitution_equiv (s1 s2 : substitution) : Prop :=
 
 Definition factors_through (general specific : substitution) : Prop :=
   exists residual,
-    substitution_equiv specific (compose_subst general residual).
+    substitution_equiv specific (comp_subst general residual).
 
 Definition is_principal_unifier
     (t1 t2 : ty) (s : substitution) : Prop :=

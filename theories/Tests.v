@@ -217,11 +217,11 @@ Example intrinsic_identity_satisfies_fundamental_theorem : forall
     (relations : Environment (SemanticRelation model))
     (left_values right_values : Environment (model_value model)),
   logical_relation model type1 left_types right_types relations
-    (fterm_sem model term1 left_types left_values)
-    (fterm_sem model term1 right_types right_values).
+    (fderiv_sem model term1 left_types left_values)
+    (fderiv_sem model term1 right_types right_values).
 Proof.
   intros.
-  apply closed_fterm_parametricity.
+  apply closed_fderiv_parametricity.
 Qed.
 
 Example intrinsic_identity_validates_its_generated_formula : forall
@@ -231,13 +231,13 @@ Example intrinsic_identity_validates_its_generated_formula : forall
     (values term_values free_values : Environment (model_value model))
     (free_relations : Environment (SemanticRelation model)),
   paired_type_environment formula_types types types ->
-  free_values 0 = fterm_sem model term1 types term_values ->
+  free_values 0 = fderiv_sem model term1 types term_values ->
   formula_sem model formula_types relations values
     free_values free_relations (relgen type1).
 Proof.
   intros model formula_types types relations values term_values
     free_values free_relations Hpaired Hprogram.
-  now apply (closed_fterm_satisfies_relgen model type1 term1
+  now apply (closed_fderiv_satisfies_relgen model type1 term1
     formula_types types relations values term_values
     free_values free_relations).
 Qed.
@@ -572,8 +572,8 @@ Qed.
 
 (** ** Raw Church syntax *)
 
-Definition raw_bad_free_type_argument : RawChurch :=
-  RCTApp (RCTAbs raw_term1) (TVar 0).
+Definition raw_bad_free_type_argument : fterm :=
+  FTApp (FTLam raw_term1) (TVar 0).
 
 Example raw_polymorphic_identity_is_scoped :
   scoped 0 raw_term1.
@@ -610,8 +610,8 @@ Example forget_shared_church_examples :
 Proof. repeat split; reflexivity. Qed.
 
 Example forgetting_preserves_erasure :
-  erase_raw (forget term2) = fterm_to_term term2.
-Proof. apply erase_raw_forget. Qed.
+  fterm_to_term (forget term2) = fderiv_to_term term2.
+Proof. apply fterm_to_term_forget. Qed.
 
 (** ** Type equality and dependent variable lookup *)
 
@@ -630,14 +630,14 @@ Example type_equality_rejects_distinct_shapes :
 Proof. reflexivity. Qed.
 
 Example dependent_lookup_returns_type_and_position :
-  match lookup_fvar [TVar 0; type1] 1 with
-  | Ok (existT _ T variable) => (T, fvar_to_nat variable)
+  match lookup_dvar [TVar 0; type1] 1 with
+  | Ok (existT _ T variable) => (T, dvar_to_nat variable)
   | Err _ => (TVar 99, 99)
   end = (type1, 1).
 Proof. reflexivity. Qed.
 
 Example dependent_lookup_preserves_original_bad_index :
-  match lookup_fvar [type1] 2 with
+  match lookup_dvar [type1] 2 with
   | Err (UnboundTermVariable index) => index
   | _ => 99
   end = 2.
@@ -645,7 +645,7 @@ Proof. reflexivity. Qed.
 
 (** ** Computational Church checker *)
 
-Definition checked_closed_type (raw : RawChurch) : option type :=
+Definition checked_closed_type (raw : fterm) : option type :=
   match check_core 0 [] raw with
   | Ok (existT _ T _) => Some T
   | Err _ => None
@@ -666,20 +666,20 @@ Example check_core_accepts_shared_reduction_examples :
   checked_closed_type raw_term4 = Some type1.
 Proof. split; reflexivity. Qed.
 
-Definition raw_context_shift : RawChurch :=
-  RCTAbs (RCAbs (TVar 0) (RCTAbs (RCVar 0))).
+Definition raw_ctx_shift : fterm :=
+  FTLam (FLam (TVar 0) (FTLam (FVar 0))).
 
-Example check_core_shifts_context_under_type_abstraction :
-  checked_closed_type raw_context_shift =
+Example check_core_shifts_ctx_under_type_abstraction :
+  checked_closed_type raw_ctx_shift =
   Some
     (TForall
       (TArrow (TVar 0) (TForall (TVar 1)))).
 Proof. reflexivity. Qed.
 
-Definition raw_type_mismatch : RawChurch :=
-  RCApp
-    (RCAbs type1 (RCVar 0))
-    (RCAbs type1 (RCVar 0)).
+Definition raw_type_mismatch : fterm :=
+  FApp
+    (FLam type1 (FVar 0))
+    (FLam type1 (FVar 0)).
 
 Example check_core_rejects_type_mismatch :
   check_core 0 [] raw_type_mismatch =
@@ -687,22 +687,22 @@ Example check_core_rejects_type_mismatch :
 Proof. reflexivity. Qed.
 
 Example check_core_rejects_non_function_application :
-  check_core 0 [] (RCApp raw_term1 raw_term1) =
+  check_core 0 [] (FApp raw_term1 raw_term1) =
   Err (ExpectedArrow type1).
 Proof. reflexivity. Qed.
 
 Example check_core_rejects_non_polymorphic_type_application :
-  check_core 0 [] (RCTApp (RCAbs type1 (RCVar 0)) type1) =
+  check_core 0 [] (FTApp (FLam type1 (FVar 0)) type1) =
   Err (ExpectedForall type2).
 Proof. reflexivity. Qed.
 
 Example check_core_rejects_free_term_variable :
-  check_core 0 [] (RCVar 0) =
+  check_core 0 [] (FVar 0) =
   Err (UnboundTermVariable 0).
 Proof. reflexivity. Qed.
 
 Example check_core_rejects_free_type_annotation :
-  check_core 0 [] (RCAbs (TVar 0) (RCVar 0)) =
+  check_core 0 [] (FLam (TVar 0) (FVar 0)) =
   Err (TypeAnnotationOutOfScope (TVar 0)).
 Proof. reflexivity. Qed.
 
@@ -713,7 +713,7 @@ Proof. reflexivity. Qed.
 
 (** ** Proof-carrying Church checker *)
 
-Definition certified_closed_type (raw : RawChurch) : option type :=
+Definition certified_closed_type (raw : fterm) : option type :=
   match checkClosed raw with
   | Ok (existT _ T _) => Some T
   | Err _ => None
@@ -729,14 +729,14 @@ Proof. repeat split; reflexivity. Qed.
 (** ** Curry/Church boundary *)
 
 Example curry_church_boundary_kernel_regression :
-  erase_raw boundary_raw_polymorphic_identity = boundary_curry_identity /\
-  erase_raw boundary_raw_identity_at_identity_type = boundary_curry_identity /\
+  fterm_to_term boundary_raw_polymorphic_identity = boundary_curry_identity /\
+  fterm_to_term boundary_raw_identity_at_identity_type = boundary_curry_identity /\
   boundary_checked_type boundary_raw_polymorphic_identity =
     Some boundary_identity_type /\
   boundary_checked_type boundary_raw_identity_at_identity_type =
     Some boundary_identity_arrow_type /\
-  erase_raw boundary_raw_type_application =
-    erase_raw boundary_raw_annotated_application /\
+  fterm_to_term boundary_raw_type_application =
+    fterm_to_term boundary_raw_annotated_application /\
   boundary_hm_identity_church_view =
     Some
       (boundary_identity_type,
@@ -764,7 +764,7 @@ Example checkClosed_rejects_type_mismatch :
 Proof. reflexivity. Qed.
 
 Example rejected_type_mismatch_has_no_intrinsic_typing :
-  ~ exists T (t : fterm [] T),
+  ~ exists T (t : fderiv [] T),
       scoped 0 raw_type_mismatch /\ forget t = raw_type_mismatch.
 Proof.
   apply checkClosed_rejected_no_typing
@@ -777,12 +777,12 @@ Qed.
 (** The free variable supplied as the argument remains free underneath the
     abstraction instead of being captured by it. *)
 Example term_subst1_avoids_capture :
-  term_subst1 0 (Abs (Var 1)) (Var 0) = Abs (Var 1).
+  term_subst1 0 (Lam (Var 1)) (Var 0) = Lam (Var 1).
 Proof. reflexivity. Qed.
 
 (** The abstraction's own bound variable is not replaced. *)
 Example term_subst1_preserves_inner_binder :
-  term_subst1 0 (Abs (Var 0)) (Var 42) = Abs (Var 0).
+  term_subst1 0 (Lam (Var 0)) (Var 42) = Lam (Var 0).
 Proof. reflexivity. Qed.
 
 (** Variables above the removed index are shifted down. *)
@@ -793,64 +793,64 @@ Proof. reflexivity. Qed.
 (** ** Weak-head reduction *)
 
 Example term1_is_whnf :
-  wh_step (fterm_to_term term1) = None.
+  wh_step (fderiv_to_term term1) = None.
 Proof. reflexivity. Qed.
 
 Example term3_takes_one_step :
-  wh_step (fterm_to_term term3) = Some (fterm_to_term term1).
+  wh_step (fderiv_to_term term3) = Some (fderiv_to_term term1).
 Proof. reflexivity. Qed.
 
 Example term4_takes_one_step :
-  wh_step (fterm_to_term term4) = Some (fterm_to_term term1).
+  wh_step (fderiv_to_term term4) = Some (fderiv_to_term term1).
 Proof. reflexivity. Qed.
 
 (** A redex is found underneath applications on the left spine. *)
 Example wh_step_follows_left_spine :
   wh_step
-    (App (App (Abs (Var 0)) (Abs (Var 0))) (Var 0)) =
-  Some (App (Abs (Var 0)) (Var 0)).
+    (App (App (Lam (Var 0)) (Lam (Var 0))) (Var 0)) =
+  Some (App (Lam (Var 0)) (Var 0)).
 Proof. reflexivity. Qed.
 
 (** Weak-head reduction does not inspect an argument of a stuck head. *)
 Example wh_step_does_not_reduce_arguments :
   wh_step
-    (App (Var 0) (App (Abs (Var 0)) (Var 1))) =
+    (App (Var 0) (App (Lam (Var 0)) (Var 1))) =
   None.
 Proof. reflexivity. Qed.
 
 (** Weak-head reduction does not proceed under an abstraction. *)
-Example wh_step_does_not_reduce_under_abs :
+Example wh_step_does_not_reduce_under_lam :
   wh_step
-    (Abs (App (Abs (Var 0)) (Var 1))) =
+    (Lam (App (Lam (Var 0)) (Var 1))) =
   None.
 Proof. reflexivity. Qed.
 
 (** ** Fuel and exact-step oracle *)
 
 Example term4_zero_fuel_is_unchanged :
-  run_fuel 0 (fterm_to_term term4) = fterm_to_term term4.
+  run_fuel 0 (fderiv_to_term term4) = fderiv_to_term term4.
 Proof. reflexivity. Qed.
 
 Example term4_one_fuel_reaches_whnf :
-  run_fuel 1 (fterm_to_term term4) = fterm_to_term term1.
+  run_fuel 1 (fderiv_to_term term4) = fderiv_to_term term1.
 Proof. reflexivity. Qed.
 
 Example term4_excess_fuel_is_harmless :
-  run_fuel 5 (fterm_to_term term4) = fterm_to_term term1.
+  run_fuel 5 (fderiv_to_term term4) = fderiv_to_term term1.
 Proof. reflexivity. Qed.
 
 Example term3_cap_zero_is_insufficient :
-  eval_cap 0 (fterm_to_term term3) = None.
+  eval_cap 0 (fderiv_to_term term3) = None.
 Proof. reflexivity. Qed.
 
 Example term3_exact_step_count :
-  eval_cap 1 (fterm_to_term term3) =
-  Some (1, fterm_to_term term1).
+  eval_cap 1 (fderiv_to_term term3) =
+  Some (1, fderiv_to_term term1).
 Proof. reflexivity. Qed.
 
 Example term4_exact_step_count :
-  eval_cap 1 (fterm_to_term term4) =
-  Some (1, fterm_to_term term1).
+  eval_cap 1 (fderiv_to_term term4) =
+  Some (1, fderiv_to_term term1).
 Proof. reflexivity. Qed.
 
 (** ** Hindley--Milner unification *)
@@ -1338,8 +1338,8 @@ Proof. apply constant_freeb_true_iff. Qed.
 Definition erased_hm_let_identity_self_application :
     SystemF.F.Syntax.term :=
   App
-    (Abs (App (Var 0) (Var 0)))
-    (Abs (Var 0)).
+    (Lam (App (Var 0) (Var 0)))
+    (Lam (Var 0)).
 
 Example hm_erasure_desugars_the_end_to_end_let :
   erase_hm_closed hm_let_identity_self_application =
@@ -1348,12 +1348,12 @@ Proof. reflexivity. Qed.
 
 Example hm_erasure_uses_nearest_binder_under_shadowing :
   erase_hm_closed (lam_t 0 (lam_t 0 (var_t 0))) =
-  Some (Abs (Abs (Var 0))).
+  Some (Lam (Lam (Var 0))).
 Proof. reflexivity. Qed.
 
 Example hm_erasure_keeps_outer_binder_index :
   erase_hm_closed (lam_t 0 (lam_t 1 (var_t 0))) =
-  Some (Abs (Abs (Var 1))).
+  Some (Lam (Lam (Var 1))).
 Proof. reflexivity. Qed.
 
 Example hm_erasure_rejects_an_unbound_name :
@@ -1523,12 +1523,12 @@ Example reifier_rejects_an_unbound_term_variable :
   Err (reify_unbound_term_variable 42).
 Proof. reflexivity. Qed.
 
-Definition raw_hm_dead_internal_type_variable : RawChurch :=
-  RCTAbs
-    (RCAbs (TVar 0)
-      (RCApp
-        (RCAbs (TArrow type1 type1) (RCVar 1))
-        (RCAbs type1 (RCVar 0)))).
+Definition raw_hm_dead_internal_type_variable : fterm :=
+  FTLam
+    (FLam (TVar 0)
+      (FApp
+        (FLam (TArrow type1 type1) (FVar 1))
+        (FLam type1 (FVar 0)))).
 
 (** The type of the unused [y] is ['2 -> '2], while ['2] does not occur in
     the principal result ['3 -> '3].  It is therefore instantiated with the
@@ -1536,8 +1536,8 @@ Definition raw_hm_dead_internal_type_variable : RawChurch :=
 Example runWChurch_defaults_a_dead_internal_type_variable :
   match runWChurch test_constant_types hm_dead_internal_type_variable with
   | Ok elaboration =>
-      raw_church_systemf_type elaboration = type1 /\
-      raw_church_term elaboration = raw_hm_dead_internal_type_variable
+      church_systemf_type elaboration = type1 /\
+      church_term elaboration = raw_hm_dead_internal_type_variable
   | Err _ => False
   end.
 Proof. vm_compute; split; reflexivity. Qed.
@@ -1553,7 +1553,7 @@ Proof. apply runWChurch_unchecked_success_iff_runW_elab_success. Qed.
 Example every_successful_raw_W_reification_is_scoped : forall
     expression elaboration,
   runWChurch_unchecked test_constant_types expression = Ok elaboration ->
-  scoped 0 (raw_church_term elaboration).
+  scoped 0 (church_term elaboration).
 Proof.
   intros expression elaboration Hchurch.
   eapply runWChurch_unchecked_scoped.
@@ -1564,11 +1564,11 @@ Qed.
 Example every_successful_raw_W_reification_checks_at_its_principal_type :
   forall expression elaboration,
   runWChurch_unchecked test_constant_types expression = Ok elaboration ->
-  exists checked : Checked 0 [] (raw_church_term elaboration),
-    checkClosed (raw_church_term elaboration) = Ok checked /\
+  exists checked : Checked 0 [] (church_term elaboration),
+    checkClosed (church_term elaboration) = Ok checked /\
     projT1 checked =
       hm_principal_type test_constant_types
-        (raw_church_hm_type elaboration).
+        (church_hm_type elaboration).
 Proof.
   intros expression elaboration Hchurch.
   exact (runWChurch_unchecked_checkClosed_principal
@@ -1577,24 +1577,24 @@ Proof.
 Qed.
 
 Example type_arguments_are_left_associated :
-  apply_type_arguments (RCVar 0) [TVar 1; TVar 0] =
-  RCTApp (RCTApp (RCVar 0) (TVar 1)) (TVar 0).
+  apply_type_arguments (FVar 0) [TVar 1; TVar 0] =
+  FTApp (FTApp (FVar 0) (TVar 1)) (TVar 0).
 Proof. reflexivity. Qed.
 
-Definition hm_apply_expression : SystemF.HM.WInCoq.Typing.term :=
+Definition hm_apply_expression : hmterm :=
   lam_t 0 (lam_t 1 (app_t (var_t 0) (var_t 1))).
 
-Definition raw_hm_apply_expression : RawChurch :=
-  RCTAbs
-    (RCTAbs
-      (RCAbs (TArrow (TVar 1) (TVar 0))
-        (RCAbs (TVar 1) (RCApp (RCVar 1) (RCVar 0))))).
+Definition raw_hm_apply_expression : fterm :=
+  FTLam
+    (FTLam
+      (FLam (TArrow (TVar 1) (TVar 0))
+        (FLam (TVar 1) (FApp (FVar 1) (FVar 0))))).
 
 (** A full two-quantifier regression checks that reversing the binder stack
     and emitting outer abstractions are paired operations. *)
 Example runWChurch_preserves_two_quantifier_order :
   match runWChurch test_constant_types hm_apply_expression with
-  | Ok elaboration => Some (raw_church_term elaboration)
+  | Ok elaboration => Some (church_term elaboration)
   | Err _ => None
   end = Some raw_hm_apply_expression.
 Proof. reflexivity. Qed.
@@ -1609,24 +1609,24 @@ Example reified_two_quantifier_term_is_accepted :
           (TArrow (TVar 1) (TVar 0))))).
 Proof. reflexivity. Qed.
 
-Definition raw_hm_let_identity_self_application : RawChurch :=
-  RCTAbs
-    (RCApp
-      (RCAbs
+Definition raw_hm_let_identity_self_application : fterm :=
+  FTLam
+    (FApp
+      (FLam
         (TForall (TArrow (TVar 0) (TVar 0)))
-        (RCApp
-          (RCTApp (RCVar 0) (TArrow (TVar 0) (TVar 0)))
-          (RCTApp (RCVar 0) (TVar 0))))
-      (RCTAbs (RCAbs (TVar 0) (RCVar 0)))).
+        (FApp
+          (FTApp (FVar 0) (TArrow (TVar 0) (TVar 0)))
+          (FTApp (FVar 0) (TVar 0))))
+      (FTLam (FLam (TVar 0) (FVar 0)))).
 
 Definition hm_let_identity_self_application_church_result :
-    RawChurchElaboration :=
-  {| raw_church_hm_type := arrow (var 2) (var 2);
-     raw_church_substitution :=
+    ChurchElaboration :=
+  {| church_hm_type := arrow (var 2) (var 2);
+     church_substitution :=
        hm_let_identity_self_application_substitution;
-     raw_church_tree := hm_let_identity_self_application_tree;
-     raw_church_systemf_type := type1;
-     raw_church_term := raw_hm_let_identity_self_application |}.
+     church_tree := hm_let_identity_self_application_tree;
+     church_systemf_type := type1;
+     church_term := raw_hm_let_identity_self_application |}.
 
 (** This freezes the full bridge, including the two distinct occurrences
     [id [a -> a]] and [id [a]] and the [let]-bound [Lambda]. *)
@@ -1667,8 +1667,8 @@ Qed.
 Example runWChurch_end_to_end_erasure_bridge :
   erase_hm_closed hm_let_identity_self_application =
   Some
-    (erase_raw
-      (raw_church_term hm_let_identity_self_application_church_result)).
+    (fterm_to_term
+      (church_term hm_let_identity_self_application_church_result)).
 Proof.
   exact
     (runWChurch_preserves_erasure
@@ -1716,7 +1716,7 @@ Example main_hm_systemf_pipeline_acceptance :
     checked_church_erasure checked =
       erased_hm_let_identity_self_application /\
     eval_cap 2 (checked_church_erasure checked) =
-      Some (2, Abs (Var 0)).
+      Some (2, Lam (Var 0)).
 Proof.
   destruct checked_W_term_reaches_the_shared_untyped_syntax
     as [checked [Hchecked Herasure]].
@@ -1772,7 +1772,7 @@ Example main_W_normalization_takes_the_exact_fast_path :
       Ok normalization /\
     normalization_bound_source normalization = exact_evaluation_bound /\
     normalization_bound normalization = 2 /\
-    normalization_result normalization = Abs (Var 0).
+    normalization_result normalization = Lam (Var 0).
 Proof.
   eexists.
   repeat split; reflexivity.
@@ -1783,11 +1783,11 @@ Example reified_W_term_is_accepted_by_the_independent_checker :
 Proof. reflexivity. Qed.
 
 Example reified_W_term_has_the_expected_erasure :
-  erase_raw raw_hm_let_identity_self_application =
+  fterm_to_term raw_hm_let_identity_self_application =
   erased_hm_let_identity_self_application.
 Proof. reflexivity. Qed.
 
-Definition hm_identity_expression : SystemF.HM.WInCoq.Typing.term :=
+Definition hm_identity_expression : hmterm :=
   lam_t 0 (var_t 0).
 
 Example w_identity_result :
@@ -1857,7 +1857,7 @@ Example w_identity_trace_records_freshness_and_instantiation :
         trace_instantiate 0 1 (sc_var 0) (Some (var 0))] |}.
 Proof. reflexivity. Qed.
 
-Definition hm_self_application : SystemF.HM.WInCoq.Typing.term :=
+Definition hm_self_application : hmterm :=
   lam_t 0 (app_t (var_t 0) (var_t 0)).
 
 (** The rejected equation exposes the occurs-check situation

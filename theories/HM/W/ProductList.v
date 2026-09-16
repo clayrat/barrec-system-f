@@ -8,18 +8,18 @@
 Set Implicit Arguments.
 
 Require Import List.
-From SystemF.HM.WInCoq Require Import Sublist.
-From SystemF.HM.WInCoq Require Import ListIds.
-From SystemF.HM.WInCoq Require Import Context.
-From SystemF.HM.WInCoq Require Import Typing.
-From SystemF.HM.WInCoq Require Import Gen.
-From SystemF.HM.WInCoq Require Import SimpleTypes.
-From SystemF.HM.WInCoq Require Import Schemes.
-From SystemF.HM.WInCoq Require Import Subst.
-From SystemF.HM.WInCoq Require Import SubstSchm.
-From SystemF.HM.WInCoq Require Import MyLtacs.
-From SystemF.HM.WInCoq Require Import NthErrorTools.
-From SystemF.HM.WInCoq Require Import LibTactics.
+From SystemF.HM.W Require Import Sublist.
+From SystemF.HM.W Require Import ListIds.
+From SystemF.HM.W Require Import Context.
+From SystemF.HM.W Require Import Typing.
+From SystemF.HM.W Require Import Gen.
+From SystemF.HM.W Require Import SimpleTypes.
+From SystemF.HM.W Require Import Schemes.
+From SystemF.HM.W Require Import Subst.
+From SystemF.HM.W Require Import SubstSchm.
+From SystemF.HM.W Require Import MyLtacs.
+From SystemF.HM.W Require Import NthErrorTools.
+From SystemF.HM.W Require Import LibTactics.
 
 (** This creates a substitution from a list of id and a list of types of the same length. *)
 Fixpoint product_list (l1 : list id) (l2 : list ty) : option substitution :=
@@ -102,7 +102,7 @@ Qed.
 Hint Resolve product_for_le_length:core.
 
 (** *)
-Lemma product_list_exists : forall (tau : ty) (G : ctx) (is_s : inst_subst),
+Lemma product_list_exists : forall (tau : ty) (G : hmctx) (is_s : inst_subst),
     max_gen_vars (gen_ty tau G) <= length is_s ->
     exists s, product_list (snd (gen_ty_aux tau G nil)) is_s = Some s.
 Proof.

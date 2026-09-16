@@ -4,7 +4,7 @@ From Stdlib Require Import List Lia PeanoNat.
 Import ListNotations.
 
 From SystemF.HM Require Import WExec Unify.
-From SystemF.HM.WInCoq Require Import
+From SystemF.HM.W Require Import
   Context Gen Infer MoreGeneral NewTypeVariable Subst SubstSchm Typing.
 
 (** The successful half of the invariant is deliberately strong.  In
@@ -12,7 +12,7 @@ From SystemF.HM.WInCoq Require Import
     an arbitrary declarative typing through the substitutions already
     computed by earlier branches. *)
 Definition w_success_spec
-    (e : term) (G : ctx) (st : id)
+    (e : hmterm) (G : hmctx) (st : id)
     (tau : ty) (s : substitution) (st' : id) : Prop :=
   st <= st' /\
   new_tv_subst s st' /\
@@ -21,7 +21,7 @@ Definition w_success_spec
   completeness e G tau s st.
 
 Definition w_result_spec
-    (e : term) (G : ctx) (st : id)
+    (e : hmterm) (G : hmctx) (st : id)
     (result : w_state_result) : Prop :=
   match result with
   | w_state_success tau s st' => w_success_spec e G st tau s st'
@@ -138,10 +138,10 @@ Proof.
            { eapply unify_exec_preserves_freshness; eauto. }
            assert (Hsall :
              new_tv_subst
-               (compose_subst s1 (compose_subst s2 su)) (S st2)).
-           { apply new_tv_compose_subst.
+               (comp_subst s1 (comp_subst s2 su)) (S st2)).
+           { apply new_tv_comp_subst.
              - eapply new_tv_subst_trans; eauto.
-             - apply new_tv_compose_subst.
+             - apply new_tv_comp_subst.
                + eapply new_tv_subst_trans; eauto.
                + exact Hsu. }
            unfold w_success_spec.
@@ -165,7 +165,7 @@ Proof.
                 has_type
                   (apply_subst_ctx psi1 (apply_subst_ctx s1 G))
                   r tau_arg).
-              { erewrite <- new_tv_compose_subst_ctx; eauto. }
+              { erewrite <- new_tv_comp_subst_ctx; eauto. }
               destruct (HCr _ _ Hright_for_W)
                 as [psi2 [Hpsi2 Hfactor2]].
               set (candidate := (st2, tauout) :: psi2).
@@ -180,7 +180,7 @@ Proof.
                 2: exact Htau1s2.
                 rewrite add_subst_new_tv_ty by exact Htau2.
                 rewrite <- Hpsi2.
-                erewrite <- (@new_tv_compose_subst_type
+                erewrite <- (@new_tv_comp_subst_type
                   psi1 s2 psi2 st1 tau1); eauto. }
               destruct (Huprincipal candidate Hcandidate)
                 as [residual Hresidual].
@@ -192,7 +192,7 @@ Proof.
                  destruct (eq_id_dec st2 st2) as [_ | Hneq];
                    [|contradiction].
                  change (tauout =
-                   apply_subst (compose_subst su residual) (var st2))
+                   apply_subst (comp_subst su residual) (var st2))
                    in Hresidual.
                  rewrite apply_compose_equiv in Hresidual.
                  exact Hresidual.
@@ -200,12 +200,12 @@ Proof.
                  repeat rewrite apply_compose_equiv.
                  rewrite <- apply_compose_equiv.
                  rewrite <- (@substitution_equiv_ty candidate
-                   (compose_subst su residual) Hresidual
+                   (comp_subst su residual) Hresidual
                    (apply_subst s2 (apply_subst s1 (var y)))).
                  unfold candidate.
                  rewrite add_subst_new_tv_ty.
                  --- rewrite (Hfactor1 y Hy).
-                     eapply (@new_tv_compose_subst_type
+                     eapply (@new_tv_comp_subst_type
                        psi1 s2 psi2 st1 (apply_subst s1 (var y))).
                      +++ intros z Hz. apply Hfactor2. exact Hz.
                      +++ apply new_tv_apply_subst_ty.
@@ -229,7 +229,7 @@ Proof.
            assert (Hright_for_W :
              has_type (apply_subst_ctx psi1 (apply_subst_ctx s1 G))
                r tau_arg).
-           { erewrite <- new_tv_compose_subst_ctx; eauto. }
+           { erewrite <- new_tv_comp_subst_ctx; eauto. }
            destruct (HCr _ _ Hright_for_W)
              as [psi2 [Hpsi2 Hfactor2]].
            set (candidate := (st2, tauout) :: psi2).
@@ -243,7 +243,7 @@ Proof.
               [eapply new_tv_ty_trans_le; eauto | exact Hs2].
            rewrite add_subst_new_tv_ty by exact Htau2.
            rewrite <- Hpsi2.
-           erewrite <- (@new_tv_compose_subst_type
+           erewrite <- (@new_tv_comp_subst_type
              psi1 s2 psi2 st1 tau1); eauto.
       * unfold w_result_spec in IHr |-.
         intros phi tauout Htyping.
@@ -253,7 +253,7 @@ Proof.
         rename H4 into HTright.
         destruct (HCl _ _ HTleft) as [psi1 [Hpsi1 Hfactor1]].
         apply (IHr psi1 tau_arg).
-        erewrite <- new_tv_compose_subst_ctx; eauto.
+        erewrite <- new_tv_comp_subst_ctx; eauto.
     + unfold w_result_spec in IHl |-.
       intros phi tauout Htyping.
       inversion Htyping; subst.
@@ -277,8 +277,8 @@ Proof.
         simpl in IH2 |-.
       * unfold w_success_spec in IH2.
         destruct IH2 as [Hst2 [Hs2 [Htau2 [HG2 HC2]]]].
-        assert (Hsall : new_tv_subst (compose_subst s1 s2) st2).
-        { apply new_tv_compose_subst.
+        assert (Hsall : new_tv_subst (comp_subst s1 s2) st2).
+        { apply new_tv_comp_subst.
           - eapply new_tv_subst_trans; eauto.
           - exact Hs2. }
         unfold w_success_spec.
@@ -312,7 +312,7 @@ Proof.
                + apply more_general_ctx_refl.
                + apply more_general_gen_ty_before_apply_subst.
              - rewrite <- Hpsi1.
-               erewrite <- new_tv_compose_subst_ctx; eauto. }
+               erewrite <- new_tv_comp_subst_ctx; eauto. }
            destruct (HC2 _ _ HT2_for_W)
              as [psi2 [Hpsi2 Hfactor2]].
            exists psi2.
@@ -320,7 +320,7 @@ Proof.
            intros y Hy.
            rewrite apply_compose_equiv.
            rewrite (Hfactor1 y Hy).
-           eapply (@new_tv_compose_subst_type psi1 s2 psi2 st1
+           eapply (@new_tv_comp_subst_type psi1 s2 psi2 st1
              (apply_subst s1 (var y))).
            ++ intros z Hz. apply Hfactor2. exact Hz.
            ++ apply new_tv_apply_subst_ty.
@@ -343,7 +343,7 @@ Proof.
            ++ apply more_general_ctx_refl.
            ++ apply more_general_gen_ty_before_apply_subst.
         -- rewrite <- Hpsi1.
-           erewrite <- new_tv_compose_subst_ctx; eauto.
+           erewrite <- new_tv_comp_subst_ctx; eauto.
     + unfold w_result_spec in IH1 |-.
       intros phi tauout Htyping.
       inversion Htyping; subst.

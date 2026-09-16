@@ -61,26 +61,26 @@ let checked_ix label ix =
   if ix < 0 then invalid_arg (label ^ ": negative de Bruijn index")
   else ix
 
-let rec ftype_shift amount cutoff = function
+let rec ftype_shift n cutoff = function
   | TVar ix when ix < cutoff -> TVar ix
-  | TVar ix -> TVar (checked_ix "ftype_shift" (ix + amount))
+  | TVar ix -> TVar (checked_ix "ftype_shift" (ix + n))
   | TArrow (dom, codom) ->
       TArrow
-        (ftype_shift amount cutoff dom,
-         ftype_shift amount cutoff codom)
-  | TForall body -> TForall (ftype_shift amount (cutoff + 1) body)
+        (ftype_shift n cutoff dom,
+         ftype_shift n cutoff codom)
+  | TForall body -> TForall (ftype_shift n (cutoff + 1) body)
 
 (* TAPL-style substitution.  [ftype_subst_top arg body] both replaces
    index zero and removes the surrounding universal binder. *)
-let rec ftype_subst ix replacement = function
+let rec ftype_subst ix rep = function
   | TVar var when var = ix ->
-      ftype_shift ix 0 replacement
+      ftype_shift ix 0 rep
   | TVar var -> TVar var
   | TArrow (dom, codom) ->
       TArrow
-        (ftype_subst ix replacement dom,
-         ftype_subst ix replacement codom)
-  | TForall body -> TForall (ftype_subst (ix + 1) replacement body)
+        (ftype_subst ix rep dom,
+         ftype_subst ix rep codom)
+  | TForall body -> TForall (ftype_subst (ix + 1) rep body)
 
 let ftype_subst_top arg body =
   ftype_shift (-1) 0
@@ -89,9 +89,9 @@ let ftype_subst_top arg body =
 let rec erase = function
   | FVar ix -> EVar ix
   | FLam (_, body) -> ELam (erase body)
-  | FApp (function_, arg) -> EApp (erase function_, erase arg)
+  | FApp (f, arg) -> EApp (erase f, erase arg)
   | FTLam body -> erase body
-  | FTApp (function_, _) -> erase function_
+  | FTApp (f, _) -> erase f
 
 type check_error =
   | Unbound_term_var of int
@@ -118,8 +118,8 @@ let rec check_fterm ty_depth ctx = function
         (match check_fterm ty_depth (dom :: ctx) body with
          | Ok codom -> Ok (TArrow (dom, codom))
          | Error error -> Error error)
-  | FApp (function_, arg) ->
-      (match check_fterm ty_depth ctx function_ with
+  | FApp (f, arg) ->
+      (match check_fterm ty_depth ctx f with
        | Error error -> Error error
        | Ok (TArrow (dom, codom)) ->
            (match check_fterm ty_depth ctx arg with
@@ -132,36 +132,36 @@ let rec check_fterm ty_depth ctx = function
       (match check_fterm (ty_depth + 1) lifted_ctx body with
        | Ok body_type -> Ok (TForall body_type)
        | Error error -> Error error)
-  | FTApp (function_, arg_type) ->
-      if not (ftype_closed ty_depth arg_type) then
-        Error (Ill_scoped_ann arg_type)
+  | FTApp (f, arg_ty) ->
+      if not (ftype_closed ty_depth arg_ty) then
+        Error (Ill_scoped_ann arg_ty)
       else
-        (match check_fterm ty_depth ctx function_ with
+        (match check_fterm ty_depth ctx f with
          | Error error -> Error error
-         | Ok (TForall body) -> Ok (ftype_subst_top arg_type body)
+         | Ok (TForall body) -> Ok (ftype_subst_top arg_ty body)
          | Ok actual -> Error (Expected_forall actual))
 
 let check_closed term = check_fterm 0 [] term
 
 (* ===== Independent weak-head reducer ===== *)
 
-let rec term_shift amount cutoff = function
+let rec term_shift n cutoff = function
   | EVar ix when ix < cutoff -> EVar ix
-  | EVar ix -> EVar (checked_ix "term_shift" (ix + amount))
-  | ELam body -> ELam (term_shift amount (cutoff + 1) body)
-  | EApp (function_, arg) ->
+  | EVar ix -> EVar (checked_ix "term_shift" (ix + n))
+  | ELam body -> ELam (term_shift n (cutoff + 1) body)
+  | EApp (f, arg) ->
       EApp
-        (term_shift amount cutoff function_,
-         term_shift amount cutoff arg)
+        (term_shift n cutoff f,
+         term_shift n cutoff arg)
 
-let rec term_subst ix replacement = function
-  | EVar var when var = ix -> term_shift ix 0 replacement
+let rec term_subst ix rep = function
+  | EVar var when var = ix -> term_shift ix 0 rep
   | EVar var -> EVar var
-  | ELam body -> ELam (term_subst (ix + 1) replacement body)
-  | EApp (function_, arg) ->
+  | ELam body -> ELam (term_subst (ix + 1) rep body)
+  | EApp (f, arg) ->
       EApp
-        (term_subst ix replacement function_,
-         term_subst ix replacement arg)
+        (term_subst ix rep f,
+         term_subst ix rep arg)
 
 let term_subst_top arg body =
   term_shift (-1) 0
@@ -169,8 +169,8 @@ let term_subst_top arg body =
 
 let rec wh_step = function
   | EApp (ELam body, arg) -> Some (term_subst_top arg body)
-  | EApp (function_, arg) ->
-      (match wh_step function_ with
+  | EApp (f, arg) ->
+      (match wh_step f with
        | Some function' -> Some (EApp (function', arg))
        | None -> None)
   | EVar _ | ELam _ -> None
@@ -189,13 +189,13 @@ let rec eval_cap fuel term =
 module IntSet = Set.Make (Int)
 
 type hm_type =
-  | HVar of int
-  | HCon of int
+  | HTVar of int
+  | HTCon of int
   | HArrow of hm_type * hm_type
 
 type hm_term =
-  | HName of int
-  | HConstant of int
+  | HVar of int
+  | HConst of int
   | HLam of int * hm_term
   | HApp of hm_term * hm_term
   | HLet of int * hm_term * hm_term
@@ -210,14 +210,14 @@ type env = (int * scheme) list
 
 let rec hm_type_eq left right =
   match left, right with
-  | HVar i, HVar j | HCon i, HCon j -> i = j
+  | HTVar i, HTVar j | HTCon i, HTCon j -> i = j
   | HArrow (a1, b1), HArrow (a2, b2) ->
       hm_type_eq a1 a2 && hm_type_eq b1 b2
   | _ -> false
 
 let rec hm_free_vars = function
-  | HVar var -> IntSet.singleton var
-  | HCon _ -> IntSet.empty
+  | HTVar var -> IntSet.singleton var
+  | HTCon _ -> IntSet.empty
   | HArrow (dom, codom) ->
       IntSet.union (hm_free_vars dom) (hm_free_vars codom)
 
@@ -234,11 +234,11 @@ let env_free_vars env =
     IntSet.empty env
 
 let rec apply_subst subst = function
-  | HVar var ->
+  | HTVar var ->
       (match List.assoc_opt var subst with
-       | None -> HVar var
-       | Some replacement -> apply_subst subst replacement)
-  | HCon constant -> HCon constant
+       | None -> HTVar var
+       | Some rep -> apply_subst subst rep)
+  | HTCon const -> HTCon const
   | HArrow (dom, codom) ->
       HArrow
         (apply_subst subst dom,
@@ -297,7 +297,7 @@ let fresh_type state =
   let var = state.next_var in
   state.next_var <- var + 1;
   record state (WFresh var);
-  HVar var
+  HTVar var
 
 let compose state after before =
   let result = comp_subst after before in
@@ -305,7 +305,7 @@ let compose state after before =
   result
 
 let bind_var var ty =
-  if hm_type_eq (HVar var) ty then []
+  if hm_type_eq (HTVar var) ty then []
   else if IntSet.mem var (hm_free_vars ty) then
     raise (W_error "occurs check")
   else
@@ -313,9 +313,9 @@ let bind_var var ty =
 
 let rec unify left right =
   match left, right with
-  | HVar var, ty -> bind_var var ty
-  | ty, HVar var -> bind_var var ty
-  | HCon fst, HCon snd when fst = snd -> []
+  | HTVar var, ty -> bind_var var ty
+  | ty, HTVar var -> bind_var var ty
+  | HTCon fst, HTCon snd when fst = snd -> []
   | HArrow (dom1, codom1), HArrow (dom2, codom2) ->
       let fst = unify dom1 dom2 in
       let snd =
@@ -357,11 +357,11 @@ let generalize state env ty =
   scheme
 
 let rec infer_w state env = function
-  | HName name ->
+  | HVar name ->
       (match lookup_env name env with
        | Some scheme -> [], instantiate state name scheme
        | None -> raise (W_error "unbound term variable"))
-  | HConstant constant -> [], HCon constant
+  | HConst const -> [], HTCon const
   | HLam (name, body) ->
       let dom = fresh_type state in
       let subst, codom =
@@ -369,20 +369,20 @@ let rec infer_w state env = function
       in
       subst,
       HArrow (apply_subst subst dom, codom)
-  | HApp (function_, arg) ->
-      let fst, function_type = infer_w state env function_ in
-      let snd, arg_type =
+  | HApp (f, arg) ->
+      let fst, f_ty = infer_w state env f in
+      let snd, arg_ty =
         infer_w state (apply_env fst env) arg
       in
-      let result_type = fresh_type state in
+      let res_ty = fresh_type state in
       let third =
         unify_traced state
-          (apply_subst snd function_type)
-          (HArrow (arg_type, result_type))
+          (apply_subst snd f_ty)
+          (HArrow (arg_ty, res_ty))
       in
       let fst_two = compose state snd fst in
       compose state third fst_two,
-      apply_subst third result_type
+      apply_subst third res_ty
   | HLet (name, bound, body) ->
       let fst, bound_type = infer_w state env bound in
       let env' = apply_env fst env in
@@ -423,23 +423,23 @@ let run_w term =
    generator.  The verified project additionally retains the W derivation and
    reifies a checked Church term; that dependent audit trail is intentionally
    not duplicated here. *)
-let hm_principal_ftype constants ty =
-  let rec first_occurrences seen = function
-    | HVar var ->
+let hm_principal_ftype consts ty =
+  let rec first_occs seen = function
+    | HTVar var ->
         if List.mem var seen then seen else seen @ [var]
-    | HCon _ -> seen
+    | HTCon _ -> seen
     | HArrow (dom, codom) ->
-        first_occurrences (first_occurrences seen dom) codom
+        first_occs (first_occs seen dom) codom
   in
-  let quantified = first_occurrences [] ty in
+  let quantified = first_occs [] ty in
   let count = List.length quantified in
   let var_pos = List.mapi (fun pos var -> var, pos) quantified in
   let rec translate = function
-    | HVar var ->
+    | HTVar var ->
         (match List.assoc_opt var var_pos with
          | Some pos -> TVar (count - pos - 1)
          | None -> invalid_arg "hm_principal_ftype: unquantified variable")
-    | HCon constant -> constants constant
+    | HTCon const -> consts const
     | HArrow (dom, codom) ->
         TArrow (translate dom, translate codom)
   in
@@ -473,8 +473,8 @@ let dag_of_hm_type ty =
         ident
   in
   let rec visit = function
-    | HVar var -> intern (DVar var)
-    | HCon constant -> intern (DConst constant)
+    | HTVar var -> intern (DVar var)
+    | HTCon const -> intern (DConst const)
     | HArrow (dom, codom) ->
         let dom_id = visit dom in
         let codom_id = visit codom in
@@ -491,8 +491,8 @@ let hm_type_of_dag dag =
     | None ->
         let ty =
           match dag.nodes.(ident) with
-          | DVar var -> HVar var
-          | DConst constant -> HCon constant
+          | DVar var -> HTVar var
+          | DConst const -> HTCon const
           | DArrow (dom, codom) ->
               HArrow (decode dom, decode codom)
         in
@@ -502,7 +502,7 @@ let hm_type_of_dag dag =
   decode dag.root
 
 let rec hm_tree_size = function
-  | HVar _ | HCon _ -> 1
+  | HTVar _ | HTCon _ -> 1
   | HArrow (dom, codom) ->
       1 + hm_tree_size dom + hm_tree_size codom
 
@@ -522,15 +522,15 @@ type presented_type =
   | PArrow of presented_type * presented_type
   | PForall of string * presented_type
 
-type relational_value =
+type rel_val =
   | VName of string
-  | VApply of relational_value * relational_value
-  | VTypeApply of relational_value * presented_type
+  | VApply of rel_val * rel_val
+  | VTypeApply of rel_val * presented_type
 
 type rel_formula =
   | RTrue
-  | RRelated of string * relational_value * relational_value
-  | REqual of relational_value * relational_value
+  | RRelated of string * rel_val * rel_val
+  | REqual of rel_val * rel_val
   | RAnd of rel_formula * rel_formula
   | RImplies of rel_formula * rel_formula
   | RForallValue of string * presented_type * rel_formula
@@ -700,22 +700,22 @@ let rec pp_presented_type = function
       in
       dom_text ^ " -> " ^ pp_presented_type codom
 
-let rec pp_relational_value = function
+let rec pp_rel_val = function
   | VName name -> name
-  | VApply (function_, arg) ->
-      "(" ^ pp_relational_value function_ ^ " "
-      ^ pp_relational_value arg ^ ")"
-  | VTypeApply (function_, arg) ->
-      "(" ^ pp_relational_value function_ ^ " ["
+  | VApply (f, arg) ->
+      "(" ^ pp_rel_val f ^ " "
+      ^ pp_rel_val arg ^ ")"
+  | VTypeApply (f, arg) ->
+      "(" ^ pp_rel_val f ^ " ["
       ^ pp_presented_type arg ^ "])"
 
 let rec pp_rel_formula = function
   | RTrue -> "True"
   | RRelated (relation, left, right) ->
-      relation ^ " " ^ pp_relational_value left ^ " "
-      ^ pp_relational_value right
+      relation ^ " " ^ pp_rel_val left ^ " "
+      ^ pp_rel_val right
   | REqual (left, right) ->
-      pp_relational_value left ^ " = " ^ pp_relational_value right
+      pp_rel_val left ^ " = " ^ pp_rel_val right
   | RAnd (left, right) ->
       "(" ^ pp_rel_formula left ^ " /\\ " ^ pp_rel_formula right ^ ")"
   | RImplies (premise, conclusion) ->
@@ -816,12 +816,12 @@ let pp_ftype ty = pp_ftype_with [] 0 ty
 let rec pp_eterm = function
   | EVar ix -> "#" ^ string_of_int ix
   | ELam body -> "(lambda. " ^ pp_eterm body ^ ")"
-  | EApp (function_, arg) ->
-      "(" ^ pp_eterm function_ ^ " " ^ pp_eterm arg ^ ")"
+  | EApp (f, arg) ->
+      "(" ^ pp_eterm f ^ " " ^ pp_eterm arg ^ ")"
 
 let rec pp_hm_type_with precedence = function
-  | HVar var -> "'" ^ string_of_int var
-  | HCon constant -> "c" ^ string_of_int constant
+  | HTVar var -> "'" ^ string_of_int var
+  | HTCon const -> "c" ^ string_of_int const
   | HArrow (dom, codom) ->
       let text =
         pp_hm_type_with 1 dom ^ " -> " ^ pp_hm_type_with 0 codom
@@ -887,6 +887,10 @@ let pp_brec_event = function
 let polymorphic_identity_type =
   TForall (TArrow (TVar 0, TVar 0))
 
+(* Mirrors [demo_constant_type] in extraction/main.ml: every constant is
+   interpreted as the polymorphic identity type. *)
+let demo_consts _ = polymorphic_identity_type
+
 let polymorphic_identity =
   FTLam (FLam (TVar 0, FVar 0))
 
@@ -903,11 +907,11 @@ let term4 =
 let w_let_identity =
   HLet
     (0,
-     HLam (1, HName 1),
-     HApp (HName 0, HName 0))
+     HLam (1, HVar 1),
+     HApp (HVar 0, HVar 0))
 
 let w_occurs_failure =
-  HLam (0, HApp (HName 0, HName 0))
+  HLam (0, HApp (HVar 0, HVar 0))
 
 let polymorphic_list_endomorphism =
   TForall
@@ -959,13 +963,15 @@ let run_examples () =
     | WInferred success -> success.inferred_type, success.trace
   in
   (match inferred_type with
-   | HArrow (HVar left, HVar right) -> assert (left = right)
+   | HArrow (HTVar left, HTVar right) -> assert (left = right)
    | _ -> failwith "let-id did not receive an identity type");
+  let principal_ftype = hm_principal_ftype demo_consts inferred_type in
+  assert (ftype_eq principal_ftype polymorphic_identity_type);
   (match run_w w_occurs_failure with
    | WRejected _ -> ()
    | WInferred _ -> failwith "self-application passed the occurs check");
 
-  let duplicated = duplicated_arrow_family 4 (HVar 0) in
+  let duplicated = duplicated_arrow_family 4 (HTVar 0) in
   let dag = dag_of_hm_type duplicated in
   assert (hm_type_eq (hm_type_of_dag dag) duplicated);
   assert (Array.length dag.nodes < hm_tree_size duplicated);
@@ -989,6 +995,7 @@ let run_examples () =
 
   Printf.printf "\nAlgorithm W:\n";
   Printf.printf "  let id = fun x -> x in id id : %s\n" (pp_hm_type inferred_type);
+  Printf.printf "  System F principal type : %s\n" (pp_ftype principal_ftype);
   List.iteri
     (fun ix event ->
        if ix < 8 then Printf.printf "    %02d  %s\n" (ix + 1) (pp_w_event event))

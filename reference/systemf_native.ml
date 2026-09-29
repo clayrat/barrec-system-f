@@ -657,14 +657,18 @@ let generate_relation ty =
 let church_bool =
   TForall (TArrow (TVar 0, TArrow (TVar 0, TVar 0)))
 
+(* [∀X. X → (A → X → X) → X]: the value on the empty list comes first,
+   as in [church_list_type] of FreeTheorems.ListTheorem. *)
 let church_list element =
   let element_under_binder = ftype_shift 1 0 element in
   TForall
     (TArrow
-       (TArrow
-          (element_under_binder,
-           TArrow (TVar 0, TVar 0)),
-        TArrow (TVar 0, TVar 0)))
+       (TVar 0,
+        TArrow
+          (TArrow
+             (element_under_binder,
+              TArrow (TVar 0, TVar 0)),
+           TVar 0)))
 
 let rec ptype_contains var = function
   | PVar name -> name = var
@@ -681,8 +685,8 @@ let bool_body binder = function
 
 let list_body binder = function
   | PArrow
-      (PArrow (element, PArrow (PVar first, PVar second)),
-       PArrow (PVar third, PVar fourth))
+      (PVar first,
+       PArrow (PArrow (element, PArrow (PVar second, PVar third)), PVar fourth))
     when first = binder && second = binder
          && third = binder && fourth = binder
          && not (ptype_contains binder element) ->
